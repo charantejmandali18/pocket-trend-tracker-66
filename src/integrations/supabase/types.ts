@@ -14,7 +14,168 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      bank_balances: {
+        Row: {
+          balance: number
+          bank_name: string
+          created_at: string
+          id: string
+          month_year: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          bank_name: string
+          created_at?: string
+          id?: string
+          month_year?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          bank_name?: string
+          created_at?: string
+          id?: string
+          month_year?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      credit_cards: {
+        Row: {
+          available_credit: number
+          card_name: string
+          created_at: string
+          credit_limit: number
+          id: string
+          month_year: string
+          outstanding_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          available_credit?: number
+          card_name: string
+          created_at?: string
+          credit_limit?: number
+          id?: string
+          month_year?: string
+          outstanding_amount?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          available_credit?: number
+          card_name?: string
+          created_at?: string
+          credit_limit?: number
+          id?: string
+          month_year?: string
+          outstanding_amount?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      fixed_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          due_date: number | null
+          expense_name: string
+          id: string
+          is_paid: boolean
+          month_year: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          due_date?: number | null
+          expense_name: string
+          id?: string
+          is_paid?: boolean
+          month_year?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          due_date?: number | null
+          expense_name?: string
+          id?: string
+          is_paid?: boolean
+          month_year?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      floating_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          expense_name: string
+          id: string
+          month_year: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          expense_name: string
+          id?: string
+          month_year?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          expense_name?: string
+          id?: string
+          month_year?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      income: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          month_year: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          month_year?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          month_year?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
