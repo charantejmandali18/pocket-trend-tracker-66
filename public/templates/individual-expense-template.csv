@@ -1,0 +1,11 @@
+Transaction Type,Date,Description,Category,Amount,Payment Method,Account,Notes
+expense,2024-01-01,Groceries from supermarket,Food & Dining,2500,card,HDFC Credit Card,Weekly grocery shopping
+expense,2024-01-02,Uber ride to office,Transportation,150,upi,PhonePe,Daily commute
+income,2024-01-01,Monthly salary,Income,50000,bank_transfer,HDFC Bank Account,Salary for January
+expense,2024-01-03,Netflix subscription,Entertainment,199,card,HDFC Credit Card,Monthly subscription
+expense,2024-01-04,Medical checkup,Healthcare,1500,cash,Cash,Annual health checkup
+expense,2024-01-05,Electricity bill,Bills & Utilities,1200,upi,Google Pay,Monthly electricity bill
+expense,2024-01-06,Shopping at mall,Shopping,3000,card,HDFC Credit Card,Clothes and accessories
+expense,2024-01-07,Coffee with friends,Food & Dining,300,cash,Cash,Weekend meetup
+income,2024-01-15,Freelance project,Income,10000,bank_transfer,HDFC Bank Account,Web development project
+expense,2024-01-08,Book purchase,Education,800,upi,PhonePe,Programming books

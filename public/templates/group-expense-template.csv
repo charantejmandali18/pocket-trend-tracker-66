@@ -1,0 +1,13 @@
+Member Email,Transaction Type,Date,Description,Category,Amount,Payment Method,Account,Notes,Is Shared Expense
+john@example.com,expense,2024-01-01,Groceries for house,Food & Dining,4000,card,John's Credit Card,Monthly household groceries,TRUE
+jane@example.com,expense,2024-01-02,Electricity bill,Bills & Utilities,2000,upi,Jane's UPI,Shared electricity bill,TRUE
+bob@example.com,expense,2024-01-03,Internet bill,Bills & Utilities,1500,bank_transfer,Bob's Account,Monthly internet for house,TRUE
+john@example.com,income,2024-01-01,Salary,Income,60000,bank_transfer,John's Bank Account,Monthly salary,FALSE
+jane@example.com,income,2024-01-01,Salary,Income,55000,bank_transfer,Jane's Bank Account,Monthly salary,FALSE
+bob@example.com,income,2024-01-01,Salary,Income,50000,bank_transfer,Bob's Bank Account,Monthly salary,FALSE
+john@example.com,expense,2024-01-04,House rent,Bills & Utilities,15000,bank_transfer,John's Account,Monthly rent payment,TRUE
+jane@example.com,expense,2024-01-05,Personal lunch,Food & Dining,500,card,Jane's Credit Card,Individual lunch expense,FALSE
+bob@example.com,expense,2024-01-06,Netflix family plan,Entertainment,499,card,Bob's Credit Card,Shared streaming subscription,TRUE
+john@example.com,expense,2024-01-07,Personal books,Education,800,cash,Cash,Individual book purchase,FALSE
+jane@example.com,expense,2024-01-08,Dining out together,Food & Dining,1200,card,Jane's Credit Card,Family dinner,TRUE
+bob@example.com,expense,2024-01-09,Personal gym membership,Healthcare,1000,card,Bob's Credit Card,Individual gym membership,FALSE

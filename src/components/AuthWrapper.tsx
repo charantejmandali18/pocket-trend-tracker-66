@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { STORAGE_CONFIG } from '@/config/storage';
 
 interface AuthWrapperProps {
   children: React.ReactNode;
@@ -20,6 +21,7 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Always use Supabase authentication regardless of storage mode
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -81,6 +83,7 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   };
 
   const handleSignOut = async () => {
+    // Always use Supabase auth for sign out
     await supabase.auth.signOut();
   };
 
@@ -95,12 +98,16 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
     );
   }
 
+  // Always show authentication when no user is logged in
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-center">Expense Tracker</CardTitle>
+            <p className="text-center text-sm text-gray-500">
+              Sign in to access your account
+            </p>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="signin" className="w-full">
@@ -173,7 +180,12 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
 
   return (
     <div>
-      <div className="fixed top-4 right-4 z-10">
+      <div className="fixed top-4 right-4 z-10 flex items-center space-x-2">
+        {STORAGE_CONFIG.USE_LOCAL_STORAGE && (
+          <div className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded text-xs font-medium">
+            Local Storage Mode
+          </div>
+        )}
         <Button onClick={handleSignOut} variant="outline" size="sm">
           Sign Out
         </Button>
