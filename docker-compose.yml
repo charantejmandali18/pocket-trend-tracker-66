@@ -1,0 +1,303 @@
+version: '3.8'
+
+networks:
+  xpend-network:
+    driver: bridge
+
+services:
+  # =============================================
+  # Infrastructure Services
+  # =============================================
+  
+  # PostgreSQL Database
+  xpend-postgres:
+    image: postgres:16
+    container_name: xpend-postgres
+    environment:
+      POSTGRES_DB: xpend_master
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: xpend_local_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./create-xpend-databases.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Redis Cache
+  xpend-redis:
+    image: redis:7-alpine
+    container_name: xpend-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # =============================================
+  # Microservices
+  # =============================================
+  
+  # Auth Service
+  xpend-auth-service:
+    build:
+      context: ./xpend-backend/auth-service
+      dockerfile: Dockerfile
+    container_name: xpend-auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_auth
+      - DB_USERNAME=auth_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Transaction Service
+  xpend-transaction-service:
+    build:
+      context: ./xpend-backend/transaction-service
+      dockerfile: Dockerfile
+    container_name: xpend-transaction-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_transactions
+      - DB_USERNAME=transaction_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Account Service
+  xpend-account-service:
+    build:
+      context: ./xpend-backend/account-service
+      dockerfile: Dockerfile
+    container_name: xpend-account-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_accounts
+      - DB_USERNAME=account_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Category Service
+  xpend-category-service:
+    build:
+      context: ./xpend-backend/category-service
+      dockerfile: Dockerfile
+    container_name: xpend-category-service
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_categories
+      - DB_USERNAME=category_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Budget Service
+  xpend-budget-service:
+    build:
+      context: ./xpend-backend/budget-service
+      dockerfile: Dockerfile
+    container_name: xpend-budget-service
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_budget
+      - DB_USERNAME=budget_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Group Service
+  xpend-group-service:
+    build:
+      context: ./xpend-backend/group-service
+      dockerfile: Dockerfile
+    container_name: xpend-group-service
+    ports:
+      - "8086:8086"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_groups
+      - DB_USERNAME=group_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Analytics Service
+  xpend-analytics-service:
+    build:
+      context: ./xpend-backend/analytics-service
+      dockerfile: Dockerfile
+    container_name: xpend-analytics-service
+    ports:
+      - "8087:8087"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_analytics
+      - DB_USERNAME=analytics_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # File Service
+  xpend-file-service:
+    build:
+      context: ./xpend-backend/file-service
+      dockerfile: Dockerfile
+    container_name: xpend-file-service
+    ports:
+      - "8088:8088"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_files
+      - DB_USERNAME=file_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Notification Service
+  xpend-notification-service:
+    build:
+      context: ./xpend-backend/notification-service
+      dockerfile: Dockerfile
+    container_name: xpend-notification-service
+    ports:
+      - "8089:8089"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=xpend-postgres
+      - DB_PORT=5432
+      - DB_NAME=xpend_notifications
+      - DB_USERNAME=notification_user
+      - DB_PASSWORD=xpend_local_password
+      - REDIS_HOST=xpend-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - xpend-postgres
+      - xpend-redis
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # =============================================
+  # API Gateway & Frontend
+  # =============================================
+  
+  # API Gateway
+  xpend-api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: xpend-api-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - xpend-auth-service
+      - xpend-transaction-service
+      - xpend-account-service
+      - xpend-category-service
+      - xpend-budget-service
+      - xpend-group-service
+      - xpend-analytics-service
+      - xpend-file-service
+      - xpend-notification-service
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+  # Frontend React Application
+  xpend-frontend:
+    build:
+      context: ./xpend-frontend
+      dockerfile: Dockerfile
+    container_name: xpend-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8080
+      - NODE_ENV=production
+    depends_on:
+      - xpend-api-gateway
+    networks:
+      - xpend-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
