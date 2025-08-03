@@ -1,5 +1,5 @@
 import ExpenseTracker from "@/components/ExpenseTracker";
-import AuthWrapper from "@/components/AuthWrapper";
+import AuthWrapper from "@/components/AuthWrapperMicroservices";
 
 const Index = () => {
   return (

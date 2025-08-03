@@ -27,36 +27,34 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
-import { STORAGE_CONFIG } from '@/config/storage';
-import { 
-  addStoredTransaction, 
-  updateStoredTransaction,
-  deleteStoredTransaction,
-  getStoredTransactions,
-  getPersonalTransactions,
-  getGroupTransactions,
-  getPersonalFinancialAccounts,
-  getGroupFinancialAccounts,
-  type StoredTransaction,
-  type FinancialAccount
-} from '@/utils/dataStorage';
+import { transactionService, Transaction, TransactionCreateRequest } from '@/services/transactionService';
+import { categoryService, Category } from '@/services/categoryService';
+import { accountService, Account } from '@/services/accountService';
 
-type Transaction = StoredTransaction;
+// Using Transaction type from transactionService
 
 const AddTransaction = () => {
-  const { user, categories, isPersonalMode, currentGroup, addCategory } = useApp();
+  const user = { id: 1 }; // Mock user for now
+  const categories = [
+    { id: '550e8400-e29b-41d4-a716-446655440001', name: 'Food & Dining', color: '#3B82F6' },
+    { id: '550e8400-e29b-41d4-a716-446655440002', name: 'Salary', color: '#10B981' },
+    { id: '550e8400-e29b-41d4-a716-446655440003', name: 'Transportation', color: '#F59E0B' },
+    { id: '550e8400-e29b-41d4-a716-446655440004', name: 'Entertainment', color: '#8B5CF6' },
+    { id: '550e8400-e29b-41d4-a716-446655440005', name: 'Shopping', color: '#EC4899' }
+  ]; // Mock categories
+  const isPersonalMode = true;
+  const currentGroup = null;
   const { toast } = useToast();
 
-  const [transaction, setTransaction] = useState<Partial<StoredTransaction>>({
-    transaction_type: 'expense',
+  const [transaction, setTransaction] = useState<Partial<TransactionCreateRequest>>({
+    transactionType: 'EXPENSE',
     amount: 0,
     description: '',
-    category_id: '',
-    transaction_date: format(new Date(), 'yyyy-MM-dd'),
-    payment_method: 'cash',
-    account_name: '',
+    categoryId: '',
+    transactionDate: format(new Date(new Date().getTime() - 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+    paymentMethod: 'cash',
+    accountName: 'Checking Account',
     notes: ''
   });
 
@@ -64,13 +62,13 @@ const AddTransaction = () => {
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryColor, setNewCategoryColor] = useState('#3B82F6');
-  const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   
   // Edit Transaction States
   const [showEditTransaction, setShowEditTransaction] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [editTransaction, setEditTransaction] = useState<Partial<StoredTransaction>>({
-    transaction_type: 'expense',
+  const [editTransaction, setEditTransaction] = useState({
+    transaction_type: 'EXPENSE',
     amount: 0,
     description: '',
     category_id: '',
@@ -88,7 +86,7 @@ const AddTransaction = () => {
   useEffect(() => {
     fetchRecentTransactions();
     fetchAccounts();
-  }, [user, isPersonalMode, currentGroup]);
+  }, []);
 
   const paymentMethods = [
     { id: 'cash', name: 'Cash', icon: Wallet },
@@ -97,84 +95,122 @@ const AddTransaction = () => {
     { id: 'bank_transfer', name: 'Bank Transfer', icon: Building },
   ];
 
-  const fetchAccounts = () => {
-    if (!user) return;
-
+  const fetchAccounts = async () => {
     try {
-      let userAccounts: FinancialAccount[] = [];
-      if (isPersonalMode) {
-        userAccounts = getPersonalFinancialAccounts(user.id);
-      } else if (currentGroup) {
-        userAccounts = getGroupFinancialAccounts(currentGroup.id);
-      }
-      setAccounts(userAccounts);
+      console.log('Fetching accounts from backend...');
+      const backendAccounts = await accountService.getAllAccounts();
+      console.log('Backend accounts:', backendAccounts);
+      setAccounts(backendAccounts);
     } catch (error) {
-      console.error('Error fetching accounts:', error);
+      console.warn('Failed to fetch accounts from backend, using mock data:', error);
+      // Fallback to mock accounts if backend is not available
+      const mockAccounts: Account[] = [
+        { 
+          id: '1', 
+          userId: 1,
+          groupId: null,
+          name: 'Checking Account', 
+          type: 'CHECKING',
+          bankName: 'HDFC Bank',
+          balance: 25000, 
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        { 
+          id: '2', 
+          userId: 1,
+          groupId: null,
+          name: 'Savings Account', 
+          type: 'SAVINGS',
+          bankName: 'ICICI Bank',
+          balance: 50000, 
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        { 
+          id: '3', 
+          userId: 1,
+          groupId: null,
+          name: 'Credit Card', 
+          type: 'CREDIT_CARD',
+          bankName: 'SBI Card',
+          balance: 5000, 
+          creditLimit: 50000,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ];
+      setAccounts(mockAccounts);
     }
   };
 
   const quickAmounts = [50, 100, 200, 500, 1000, 2000];
 
-  const fetchRecentTransactions = () => {
+  const fetchRecentTransactions = async () => {
     if (!user) return;
 
     try {
-      let transactions: StoredTransaction[] = [];
-      if (isPersonalMode) {
-        transactions = getPersonalTransactions(user.id, user.email);
-      } else if (currentGroup) {
-        transactions = getGroupTransactions(currentGroup.id);
-      }
+      const response = await transactionService.getAllTransactions({
+        page: 0,
+        size: 10,
+        sortBy: 'createdAt',
+        sortDirection: 'DESC'
+      });
       
-      // Sort by created_at descending and take latest 10
-      const sortedTransactions = transactions
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 10);
-      
-      setRecentTransactions(sortedTransactions);
+      // The API returns an object with transactions array
+      const transactions = response.transactions || response || [];
+      setRecentTransactions(Array.isArray(transactions) ? transactions : []);
     } catch (error) {
       console.error('Error fetching transactions:', error);
+      setRecentTransactions([]); // Ensure it's always an array
+      toast({
+        title: "Error",
+        description: "Failed to fetch recent transactions",
+        variant: "destructive",
+      });
     }
   };
 
-  const handleSave = () => {
-    if (!user || !transaction.description || !transaction.amount || !transaction.category_id) {
+  const handleSave = async () => {
+    console.log('handleSave called');
+    console.log('Current transaction state:', transaction);
+    console.log('User:', user);
+    console.log('Validation checks:', {
+      hasUser: !!user,
+      hasDescription: !!transaction.description,
+      hasValidAmount: transaction.amount > 0,
+      hasCategoryId: !!transaction.categoryId,
+      hasPaymentMethod: !!transaction.paymentMethod,
+      hasAccountName: !!transaction.accountName
+    });
+
+    if (!user || !transaction.description || transaction.amount <= 0 || !transaction.categoryId || !transaction.paymentMethod || !transaction.accountName) {
+      console.log('Validation failed');
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields (description, amount, category, payment method, account)",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      const selectedCategory = categories.find(c => c.id === transaction.category_id);
-      
-      const newTransaction: StoredTransaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        user_id: user.id,
-        group_id: isPersonalMode ? null : currentGroup?.id || null,
-        created_by: user.id,
-        transaction_type: transaction.transaction_type || 'expense',
+      const newTransaction: TransactionCreateRequest = {
+        transactionType: transaction.transactionType || 'EXPENSE',
         amount: transaction.amount || 0,
         description: transaction.description || '',
-        category_id: transaction.category_id || '',
-        transaction_date: transaction.transaction_date || format(new Date(), 'yyyy-MM-dd'),
-        payment_method: transaction.payment_method || 'cash',
-        account_name: transaction.account_name || '',
-        notes: transaction.notes || '',
-        source: 'manual',
-        created_at: new Date().toISOString(),
-        member_email: user.email || '',
-        categories: selectedCategory ? {
-          id: selectedCategory.id,
-          name: selectedCategory.name,
-          color: selectedCategory.color || '#3B82F6',
-          icon: selectedCategory.icon
-        } : undefined
+        categoryId: transaction.categoryId || '',
+        transactionDate: transaction.transactionDate || format(new Date(), 'yyyy-MM-dd'),
+        paymentMethod: transaction.paymentMethod || 'cash',
+        accountName: transaction.accountName || '',
+        notes: transaction.notes || ''
       };
 
-      addStoredTransaction(newTransaction);
+      console.log('Sending transaction:', newTransaction);
+      await transactionService.createTransaction(newTransaction);
 
       toast({
         title: "Success",
@@ -183,13 +219,13 @@ const AddTransaction = () => {
 
       // Reset form
       setTransaction({
-        transaction_type: 'expense',
+        transactionType: 'EXPENSE',
         amount: 0,
         description: '',
-        category_id: '',
-        transaction_date: format(new Date(), 'yyyy-MM-dd'),
-        payment_method: 'cash',
-        account_name: '',
+        categoryId: '',
+        transactionDate: format(new Date(new Date().getTime() - 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+        paymentMethod: 'cash',
+        accountName: 'Checking Account',
         notes: ''
       });
 
@@ -197,9 +233,10 @@ const AddTransaction = () => {
       fetchRecentTransactions();
     } catch (error) {
       console.error('Error saving transaction:', error);
+      console.error('Error details:', error?.response || error?.message || error);
       toast({
         title: "Error",
-        description: "Failed to save transaction",
+        description: `Failed to save transaction: ${error?.message || 'Unknown error'}`,
         variant: "destructive",
       });
     }
@@ -208,9 +245,14 @@ const AddTransaction = () => {
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) return;
 
-    const category = await addCategory(newCategoryName.trim(), newCategoryColor);
+    // Mock category creation for now
+    const category = { 
+      id: Date.now().toString(), 
+      name: newCategoryName.trim(), 
+      color: newCategoryColor 
+    };
     if (category) {
-      setTransaction({ ...transaction, category_id: category.id });
+      setTransaction({ ...transaction, categoryId: category.id });
       setNewCategoryName('');
       setNewCategoryColor('#3B82F6');
       setShowAddCategory(false);
@@ -220,19 +262,19 @@ const AddTransaction = () => {
   const handleEditTransaction = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setEditTransaction({
-      transaction_type: transaction.transaction_type,
+      transaction_type: transaction.transactionType || transaction.transaction_type,
       amount: transaction.amount,
       description: transaction.description,
-      category_id: transaction.category_id,
-      transaction_date: transaction.transaction_date,
-      payment_method: transaction.payment_method,
-      account_name: transaction.account_name,
+      category_id: transaction.categoryId || transaction.category_id,
+      transaction_date: transaction.transactionDate || transaction.transaction_date,
+      payment_method: transaction.paymentMethod || transaction.payment_method,
+      account_name: transaction.accountName || transaction.account_name,
       notes: transaction.notes || ''
     });
     setShowEditTransaction(true);
   };
 
-  const handleUpdateTransaction = () => {
+  const handleUpdateTransaction = async () => {
     if (!editingTransaction || !editTransaction.description || !editTransaction.amount || !editTransaction.category_id) {
       toast({
         title: "Error",
@@ -245,14 +287,14 @@ const AddTransaction = () => {
     try {
       const selectedCategory = categories.find(c => c.id === editTransaction.category_id);
       
-      const updates: Partial<StoredTransaction> = {
-        transaction_type: editTransaction.transaction_type || 'expense',
+      const updates = {
+        transactionType: editTransaction.transaction_type || 'EXPENSE',
         amount: editTransaction.amount || 0,
         description: editTransaction.description || '',
-        category_id: editTransaction.category_id || '',
-        transaction_date: editTransaction.transaction_date || format(new Date(), 'yyyy-MM-dd'),
-        payment_method: editTransaction.payment_method || 'cash',
-        account_name: editTransaction.account_name || '',
+        categoryId: editTransaction.category_id || '',
+        transactionDate: editTransaction.transaction_date || format(new Date(), 'yyyy-MM-dd'),
+        paymentMethod: editTransaction.payment_method || 'cash',
+        accountName: editTransaction.account_name || '',
         notes: editTransaction.notes || '',
         categories: selectedCategory ? {
           id: selectedCategory.id,
@@ -262,7 +304,16 @@ const AddTransaction = () => {
         } : undefined
       };
 
-      updateStoredTransaction(editingTransaction.id, updates);
+      await transactionService.updateTransaction(editingTransaction.id, {
+        description: updates.description,
+        amount: updates.amount,
+        transactionType: updates.transactionType.toUpperCase() as 'INCOME' | 'EXPENSE',
+        categoryId: updates.categoryId,
+        transactionDate: updates.transactionDate,
+        paymentMethod: updates.paymentMethod,
+        accountName: updates.accountName,
+        notes: updates.notes
+      });
 
       toast({
         title: "Success",
@@ -272,7 +323,7 @@ const AddTransaction = () => {
       // Reset form and close dialog
       setEditingTransaction(null);
       setEditTransaction({
-        transaction_type: 'expense',
+        transaction_type: 'EXPENSE',
         amount: 0,
         description: '',
         category_id: '',
@@ -295,14 +346,16 @@ const AddTransaction = () => {
     }
   };
 
-  const handleDeleteTransaction = (transactionId: string, description: string) => {
+  const handleDeleteTransaction = async (transactionId: string, description: string) => {
     if (!confirm(`Are you sure you want to delete "${description}"? This action cannot be undone.`)) {
       return;
     }
 
     try {
-      deleteStoredTransaction(transactionId);
+      console.log('About to delete transaction:', transactionId);
+      await transactionService.deleteTransaction(transactionId);
       
+      console.log('Delete completed successfully');
       toast({
         title: "Transaction Deleted",
         description: `Transaction "${description}" has been deleted successfully.`,
@@ -313,9 +366,13 @@ const AddTransaction = () => {
       
     } catch (error) {
       console.error('Error deleting transaction:', error);
+      console.error('Error type:', typeof error);
+      console.error('Error message:', error?.message);
+      console.error('Full error object:', error);
+      
       toast({
         title: "Error",
-        description: "Failed to delete transaction",
+        description: `Failed to delete transaction: ${error?.message || 'Unknown error'}`,
         variant: "destructive",
       });
     }
@@ -323,7 +380,7 @@ const AddTransaction = () => {
 
   const getTransactionTypeCategories = () => {
     return categories.filter(c => {
-      if (transaction.transaction_type === 'income') {
+      if (transaction.transactionType === 'INCOME') {
         return c.name.toLowerCase().includes('income') || 
                c.name.toLowerCase().includes('salary') || 
                c.name.toLowerCase().includes('freelance') ||
@@ -366,16 +423,16 @@ const AddTransaction = () => {
                 <Label>Transaction Type</Label>
                 <div className="flex space-x-2 mt-2">
                   <Button
-                    variant={transaction.transaction_type === 'expense' ? 'default' : 'outline'}
-                    onClick={() => setTransaction({...transaction, transaction_type: 'expense', category_id: ''})}
+                    variant={transaction.transactionType === 'EXPENSE' ? 'default' : 'outline'}
+                    onClick={() => setTransaction({...transaction, transactionType: 'EXPENSE', categoryId: ''})}
                     className="flex-1"
                   >
                     <TrendingDown className="h-4 w-4 mr-2" />
                     Expense
                   </Button>
                   <Button
-                    variant={transaction.transaction_type === 'income' ? 'default' : 'outline'}
-                    onClick={() => setTransaction({...transaction, transaction_type: 'income', category_id: ''})}
+                    variant={transaction.transactionType === 'INCOME' ? 'default' : 'outline'}
+                    onClick={() => setTransaction({...transaction, transactionType: 'INCOME', categoryId: ''})}
                     className="flex-1"
                   >
                     <TrendingUp className="h-4 w-4 mr-2" />
@@ -469,7 +526,7 @@ const AddTransaction = () => {
                     </DialogContent>
                   </Dialog>
                 </div>
-                <Select value={transaction.category_id} onValueChange={(value) => setTransaction({...transaction, category_id: value})}>
+                <Select value={transaction.categoryId} onValueChange={(value) => setTransaction({...transaction, categoryId: value})}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
@@ -491,8 +548,8 @@ const AddTransaction = () => {
                 <Label>Date</Label>
                 <Input
                   type="date"
-                  value={transaction.transaction_date}
-                  onChange={(e) => setTransaction({...transaction, transaction_date: e.target.value})}
+                  value={transaction.transactionDate}
+                  onChange={(e) => setTransaction({...transaction, transactionDate: e.target.value})}
                 />
               </div>
 
@@ -503,8 +560,8 @@ const AddTransaction = () => {
                   {paymentMethods.map((method) => (
                     <Button
                       key={method.id}
-                      variant={transaction.payment_method === method.id ? 'default' : 'outline'}
-                      onClick={() => setTransaction({...transaction, payment_method: method.id})}
+                      variant={transaction.paymentMethod === method.id ? 'default' : 'outline'}
+                      onClick={() => setTransaction({...transaction, paymentMethod: method.id})}
                       className="justify-start"
                     >
                       <method.icon className="h-4 w-4 mr-2" />
@@ -517,7 +574,7 @@ const AddTransaction = () => {
               {/* Account */}
               <div>
                 <Label>Account</Label>
-                <Select value={transaction.account_name} onValueChange={(value) => setTransaction({...transaction, account_name: value})}>
+                <Select value={transaction.accountName} onValueChange={(value) => setTransaction({...transaction, accountName: value})}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select account" />
                   </SelectTrigger>
@@ -528,7 +585,7 @@ const AddTransaction = () => {
                           <div className="w-3 h-3 rounded-full bg-blue-500" />
                           <span>{account.name}</span>
                           <span className="text-xs text-gray-500">
-                            ({account.type} • ₹{account.balance.toLocaleString()})
+                            ({account.type.toLowerCase()} • ₹{account.balance.toLocaleString()})
                           </span>
                         </div>
                       </SelectItem>
@@ -578,13 +635,13 @@ const AddTransaction = () => {
                           <div className="font-medium text-sm">{trans.description}</div>
                           <div className="text-xs text-gray-500">{trans.categories?.name || 'Uncategorized'}</div>
                           <div className="text-xs text-gray-400">
-                            {format(new Date(trans.transaction_date), 'MMM dd')} • {trans.payment_method}
+                            {format(new Date(trans.transactionDate || trans.transaction_date), 'MMM dd')} • {trans.paymentMethod || trans.payment_method}
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <div className={`text-sm font-semibold ${trans.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                          {trans.transaction_type === 'income' ? '+' : '-'}₹{trans.amount}
+                        <div className={`text-sm font-semibold ${trans.transactionType === 'INCOME' || trans.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                          {trans.transactionType === 'INCOME' || trans.transaction_type === 'income' ? '+' : '-'}₹{trans.amount}
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -628,17 +685,19 @@ const AddTransaction = () => {
             <CardContent>
               <div className="space-y-2">
                 {(() => {
-                  const today = format(new Date(), 'yyyy-MM-dd');
-                  const todayTransactions = recentTransactions.filter(t => 
-                    t.transaction_date === today
-                  );
-                  const todayIncome = todayTransactions
-                    .filter(t => t.transaction_type === 'income')
-                    .reduce((sum, t) => sum + t.amount, 0);
-                  const todayExpenses = todayTransactions
-                    .filter(t => t.transaction_type === 'expense')
-                    .reduce((sum, t) => sum + t.amount, 0);
-                  const net = todayIncome - todayExpenses;
+                  try {
+                    const today = format(new Date(), 'yyyy-MM-dd');
+                    const todayTransactions = recentTransactions.filter(t => {
+                      const transactionDate = t.transactionDate || t.transaction_date;
+                      return transactionDate && transactionDate.includes(today);
+                    });
+                    const todayIncome = todayTransactions
+                      .filter(t => (t.transactionType === 'INCOME' || t.transaction_type === 'income'))
+                      .reduce((sum, t) => sum + (t.amount || 0), 0);
+                    const todayExpenses = todayTransactions
+                      .filter(t => (t.transactionType === 'EXPENSE' || t.transaction_type === 'expense'))
+                      .reduce((sum, t) => sum + (t.amount || 0), 0);
+                    const net = todayIncome - todayExpenses;
 
                   return (
                     <>
@@ -659,6 +718,14 @@ const AddTransaction = () => {
                       </div>
                     </>
                   );
+                  } catch (error) {
+                    console.error('Error in Today\'s Summary:', error);
+                    return (
+                      <div className="text-center text-gray-500 py-4">
+                        <p>Unable to load today's summary</p>
+                      </div>
+                    );
+                  }
                 })()}
               </div>
             </CardContent>
@@ -678,16 +745,16 @@ const AddTransaction = () => {
               <Label>Transaction Type</Label>
               <div className="flex space-x-2 mt-2">
                 <Button
-                  variant={editTransaction.transaction_type === 'expense' ? 'default' : 'outline'}
-                  onClick={() => setEditTransaction({...editTransaction, transaction_type: 'expense', category_id: ''})}
+                  variant={editTransaction.transaction_type === 'EXPENSE' ? 'default' : 'outline'}
+                  onClick={() => setEditTransaction({...editTransaction, transaction_type: 'EXPENSE', category_id: ''})}
                   className="flex-1"
                 >
                   <TrendingDown className="h-4 w-4 mr-2" />
                   Expense
                 </Button>
                 <Button
-                  variant={editTransaction.transaction_type === 'income' ? 'default' : 'outline'}
-                  onClick={() => setEditTransaction({...editTransaction, transaction_type: 'income', category_id: ''})}
+                  variant={editTransaction.transaction_type === 'INCOME' ? 'default' : 'outline'}
+                  onClick={() => setEditTransaction({...editTransaction, transaction_type: 'INCOME', category_id: ''})}
                   className="flex-1"
                 >
                   <TrendingUp className="h-4 w-4 mr-2" />
@@ -729,7 +796,7 @@ const AddTransaction = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {categories.filter(c => {
-                    if (editTransaction.transaction_type === 'income') {
+                    if (editTransaction.transaction_type === 'INCOME') {
                       return c.name.toLowerCase().includes('income') || 
                              c.name.toLowerCase().includes('salary') || 
                              c.name.toLowerCase().includes('freelance') ||
@@ -794,7 +861,7 @@ const AddTransaction = () => {
                         <div className="w-3 h-3 rounded-full bg-blue-500" />
                         <span>{account.name}</span>
                         <span className="text-xs text-gray-500">
-                          ({account.type} • ₹{account.balance.toLocaleString()})
+                          ({account.type.toLowerCase()} • ₹{account.balance.toLocaleString()})
                         </span>
                       </div>
                     </SelectItem>

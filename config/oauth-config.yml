@@ -1,0 +1,22 @@
+# OAuth Configuration for Email Extraction Service
+
+oauth:
+  gmail:
+    client-id: "your-gmail-client-id-here"
+    client-secret: "your-gmail-client-secret-here"
+    redirect-uri: "https://9310839c4ba2.ngrok-free.app/oauth/callback"
+  outlook:
+    client-id: "your-outlook-client-id"
+    client-secret: "your-outlook-client-secret"
+    redirect-uri: "http://localhost:8089/api/email-auth/callback/outlook"
+  security:
+    encryption-key: "xpend-extraction-encryption-key-2024-secure"
+    jwt-secret: "xpend-jwt-secret-key-for-extraction-service-2024"
+
+# Extraction Service Configuration
+extraction:
+  enabled: true
+  batch-size: 50
+  processing-interval: 300000 # 5 minutes
+  max-emails-per-run: 1000
+  auto-create-threshold: 0.8

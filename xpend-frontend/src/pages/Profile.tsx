@@ -29,6 +29,7 @@ import {
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { emailAuthService, EmailAccount, ExtractionStats } from '@/services/emailAuthService';
 import { 
   getPersonalTransactions, 
   getGroupTransactions,
@@ -42,7 +43,15 @@ import {
 } from '@/utils/dataStorage';
 
 const Profile = () => {
-  const { user, userGroups, isPersonalMode, currentGroup } = useApp();
+  // Use useMemo to prevent object recreation on every render
+  const user = React.useMemo(() => ({ 
+    id: 1, 
+    email: 'dev@example.com', 
+    fullName: 'Development User' 
+  }), []); // Mock user
+  const userGroups = [];
+  const isPersonalMode = true;
+  const currentGroup = null;
   const { toast } = useToast();
   
   const [userMappings, setUserMappings] = useState<UserMapping[]>([]);
@@ -54,12 +63,65 @@ const Profile = () => {
     groupsOwned: 0,
     groupsJoined: 0
   });
+  
+  // Email authentication states
+  const [connectedEmails, setConnectedEmails] = useState<EmailAccount[]>([]);
+  const [extractionStats, setExtractionStats] = useState<ExtractionStats | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState<string | null>(null);
+  const [loadingEmailData, setLoadingEmailData] = useState(false);
+  const [oauthTokens, setOauthTokens] = useState<{
+    email?: string;
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    provider?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (user) {
       fetchProfileData();
+      fetchEmailData();
     }
-  }, [user]);
+  }, [user.id]); // Only depend on user.id instead of the whole user object
+
+  // Handle OAuth callback parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const auth = urlParams.get('auth');
+    const provider = urlParams.get('provider');
+    const email = urlParams.get('email');
+    const accessToken = urlParams.get('access_token');
+    const refreshToken = urlParams.get('refresh_token');
+    const expiresIn = urlParams.get('expires_in');
+    const error = urlParams.get('error');
+
+    if (auth === 'success' && provider === 'gmail' && email && accessToken) {
+      setOauthTokens({
+        email: decodeURIComponent(email),
+        access_token: decodeURIComponent(accessToken),
+        refresh_token: refreshToken ? decodeURIComponent(refreshToken) : undefined,
+        expires_in: expiresIn ? parseInt(expiresIn) : undefined,
+        provider: provider.toUpperCase()
+      });
+      
+      toast({
+        title: "OAuth Success!",
+        description: `Gmail tokens received for ${decodeURIComponent(email)}`,
+      });
+
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (auth === 'error' && error) {
+      toast({
+        title: "OAuth Error",
+        description: decodeURIComponent(error),
+        variant: "destructive"
+      });
+
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [toast]);
 
   const fetchProfileData = () => {
     if (!user) return;
@@ -95,6 +157,134 @@ const Profile = () => {
       groupsOwned,
       groupsJoined
     });
+  };
+
+  const fetchEmailData = async () => {
+    // Prevent multiple simultaneous calls
+    if (loadingEmailData) {
+      console.log('Email data fetch already in progress, skipping...');
+      return;
+    }
+    
+    setLoadingEmailData(true);
+    try {
+      const [accounts, stats] = await Promise.all([
+        emailAuthService.getConnectedAccounts(),
+        emailAuthService.getExtractionStats(),
+      ]);
+      
+      setConnectedEmails(accounts);
+      setExtractionStats(stats);
+    } catch (error) {
+      console.error('Failed to fetch email data:', error);
+    } finally {
+      setLoadingEmailData(false);
+    }
+  };
+
+  const handleConnectGmail = async () => {
+    setLoadingAuth('GMAIL');
+    try {
+      const result = await emailAuthService.connectGmail();
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: `Gmail account ${result.email} connected successfully`,
+        });
+        fetchEmailData(); // Refresh data
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to connect Gmail account",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to connect Gmail account",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAuth(null);
+    }
+  };
+
+  const handleConnectOutlook = async () => {
+    setLoadingAuth('OUTLOOK');
+    try {
+      const result = await emailAuthService.connectOutlook();
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: `Outlook account ${result.email} connected successfully`,
+        });
+        fetchEmailData(); // Refresh data
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to connect Outlook account",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to connect Outlook account",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAuth(null);
+    }
+  };
+
+  const handleDisconnectAccount = async (accountId: number, email: string) => {
+    try {
+      const success = await emailAuthService.disconnectAccount(accountId);
+      if (success) {
+        toast({
+          title: "Success",
+          description: `Disconnected ${email} successfully`,
+        });
+        fetchEmailData(); // Refresh data
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to disconnect account",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to disconnect account",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSyncAccount = async (accountId: number) => {
+    try {
+      const success = await emailAuthService.triggerSync(accountId);
+      if (success) {
+        toast({
+          title: "Success",
+          description: "Sync triggered successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to trigger sync",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to trigger sync",
+        variant: "destructive",
+      });
+    }
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -207,12 +397,12 @@ const Profile = () => {
               <Shield className="h-5 w-5 text-gray-500" />
               <div className="flex-1">
                 <div className="text-sm font-medium">User ID</div>
-                <div className="text-xs text-gray-500 font-mono">{user.id.slice(0, 12)}...</div>
+                <div className="text-xs text-gray-500 font-mono">{user.id.toString().slice(0, 12)}...</div>
               </div>
               <Button 
                 size="sm" 
                 variant="ghost"
-                onClick={() => copyToClipboard(user.id, 'User ID')}
+                onClick={() => copyToClipboard(user.id.toString(), 'User ID')}
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -277,6 +467,7 @@ const Profile = () => {
       <Tabs defaultValue="groups" className="space-y-4">
         <TabsList>
           <TabsTrigger value="groups">My Groups</TabsTrigger>
+          <TabsTrigger value="email-auth">Email Accounts</TabsTrigger>
           <TabsTrigger value="mappings">Email Mappings</TabsTrigger>
           <TabsTrigger value="data">Data Management</TabsTrigger>
         </TabsList>
@@ -339,6 +530,210 @@ const Profile = () => {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="email-auth" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Email Account Integration</CardTitle>
+              <p className="text-sm text-gray-500">
+                Connect your email accounts to automatically extract transaction data
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Connected Email Accounts */}
+              <div className="space-y-3">
+                <h4 className="font-medium text-sm text-gray-700 dark:text-gray-300">
+                  Connected Accounts ({connectedEmails.length})
+                </h4>
+                
+                {connectedEmails.length > 0 ? (
+                  <div className="space-y-3">
+                    {connectedEmails.map((account) => (
+                      <div key={account.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            account.provider === 'GMAIL' ? 'bg-red-500' :
+                            account.provider === 'OUTLOOK' ? 'bg-blue-500' : 'bg-purple-500'
+                          }`}>
+                            <Mail className="h-5 w-5 text-white" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{account.emailAddress}</div>
+                            <div className="text-sm text-gray-500 flex items-center space-x-2">
+                              <span>{account.provider}</span>
+                              <span>•</span>
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                account.isActive && !account.tokenExpired ? 
+                                'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
+                                {account.isActive && !account.tokenExpired ? 'Active' : 
+                                 account.tokenExpired ? 'Token Expired' : 'Inactive'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              {account.totalTransactionsExtracted} transactions extracted • 
+                              Last sync: {account.lastSyncAt ? 
+                                format(new Date(account.lastSyncAt), 'MMM dd, HH:mm') : 'Never'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {account.isActive && (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleSyncAccount(account.id)}
+                            >
+                              Sync
+                            </Button>
+                          )}
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => handleDisconnectAccount(account.id, account.emailAddress)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500 py-8">
+                    <Mail className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p className="text-lg font-medium">No email accounts connected</p>
+                    <p className="text-sm mb-4">Connect your email to automatically import transactions</p>
+                  </div>
+                )}
+                
+                {/* OAuth Tokens Debug Display */}
+                {oauthTokens && (
+                  <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="flex items-center justify-between mb-3">
+                      <h5 className="font-medium text-green-800 dark:text-green-200">🎉 OAuth Tokens Received!</h5>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        onClick={() => setOauthTokens(null)}
+                        className="text-green-600 hover:text-green-800"
+                      >
+                        ✕
+                      </Button>
+                    </div>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded border">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">Email:</span>
+                        <span className="text-green-600 font-mono">{oauthTokens.email}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded border">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">Provider:</span>
+                        <span className="text-blue-600 font-mono">{oauthTokens.provider}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded border">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">Access Token:</span>
+                        <span className="text-purple-600 font-mono text-xs">{oauthTokens.access_token}</span>
+                      </div>
+                      {oauthTokens.refresh_token && (
+                        <div className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded border">
+                          <span className="font-medium text-gray-700 dark:text-gray-300">Refresh Token:</span>
+                          <span className="text-orange-600 font-mono text-xs">{oauthTokens.refresh_token}</span>
+                        </div>
+                      )}
+                      {oauthTokens.expires_in && (
+                        <div className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded border">
+                          <span className="font-medium text-gray-700 dark:text-gray-300">Expires In:</span>
+                          <span className="text-red-600 font-mono">{oauthTokens.expires_in} seconds</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800">
+                      <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                        ✅ <strong>Success!</strong> Gmail OAuth is working. The tokens above prove the complete OAuth flow is functional.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Extraction Stats */}
+                {extractionStats && (
+                  <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <h5 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Extraction Statistics</h5>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600 dark:text-gray-400">Total Emails:</span>
+                        <span className="ml-2 font-medium">{extractionStats.totalEmailsProcessed.toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 dark:text-gray-400">Transactions:</span>
+                        <span className="ml-2 font-medium">{extractionStats.totalTransactionsExtracted.toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 dark:text-gray-400">Pending:</span>
+                        <span className="ml-2 font-medium text-orange-600">{extractionStats.unprocessedTransactions}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 dark:text-gray-400">Confidence:</span>
+                        <span className="ml-2 font-medium">{(extractionStats.averageConfidence * 100).toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Add Email Account Buttons */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium text-sm text-gray-700 dark:text-gray-300 mb-3">Connect New Account</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <Button 
+                    variant="outline" 
+                    className="h-16 flex flex-col space-y-2"
+                    onClick={handleConnectGmail}
+                    disabled={loadingAuth === 'GMAIL'}
+                  >
+                    <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                      <Mail className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="text-sm">
+                      {loadingAuth === 'GMAIL' ? 'Connecting...' : 'Gmail'}
+                    </span>
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="h-16 flex flex-col space-y-2"
+                    onClick={handleConnectOutlook}
+                    disabled={loadingAuth === 'OUTLOOK'}
+                  >
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                      <Mail className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="text-sm">
+                      {loadingAuth === 'OUTLOOK' ? 'Connecting...' : 'Outlook'}
+                    </span>
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="h-16 flex flex-col space-y-2"
+                    disabled
+                  >
+                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                      <Mail className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="text-sm">Yahoo (Soon)</span>
+                  </Button>
+                </div>
+              </div>
+
+              <Alert>
+                <Shield className="h-4 w-4" />
+                <AlertDescription>
+                  All email access tokens are encrypted and stored securely. We only read transaction-related emails.
+                </AlertDescription>
+              </Alert>
             </CardContent>
           </Card>
         </TabsContent>

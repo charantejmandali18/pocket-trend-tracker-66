@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Gmail OAuth</title>
+</head>
+<body>
+    <h1>Gmail OAuth Test</h1>
+    <button onclick="testGmailAuth()">Test Gmail Authorization</button>
+    <div id="result"></div>
+
+    <script>
+        async function testGmailAuth() {
+            try {
+                const response = await fetch('http://localhost:8089/api/email-auth/gmail/authorize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                console.log('Auth response:', data);
+                
+                if (data.authUrl) {
+                    document.getElementById('result').innerHTML = `
+                        <p>✅ Authorization endpoint working!</p>
+                        <p><a href="${data.authUrl}" target="_blank">Click here to test OAuth flow</a></p>
+                        <p><strong>Callback URL:</strong> http://localhost:8089/api/email-auth/callback/gmail</p>
+                    `;
+                } else {
+                    document.getElementById('result').innerHTML = `<p>❌ Error: ${JSON.stringify(data)}</p>`;
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<p>❌ Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

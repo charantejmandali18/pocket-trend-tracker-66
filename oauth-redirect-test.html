@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OAuth Redirect Test</title>
+</head>
+<body>
+    <h1>OAuth Flow Test</h1>
+    
+    <div id="status">Testing...</div>
+    
+    <script>
+        async function testOAuthFlow() {
+            try {
+                // Step 1: Get authorization URL
+                const response = await fetch('http://localhost:8089/api/email-auth/gmail/authorize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                console.log('Auth data:', data);
+                
+                if (data.authUrl) {
+                    document.getElementById('status').innerHTML = `
+                        <p>✅ Authorization endpoint working!</p>
+                        <p><strong>Auth URL:</strong> <a href="${data.authUrl}" target="_blank">Open OAuth Flow</a></p>
+                        <p><strong>Expected Callback:</strong> http://localhost:8089/api/email-auth/callback/gmail</p>
+                        <p><strong>Status:</strong> Click the link above to test the complete flow</p>
+                        <hr>
+                        <h3>Troubleshooting:</h3>
+                        <p>If you get HTTP 403:</p>
+                        <ul>
+                            <li>Make sure you complete the Google OAuth flow (don't access callback URL directly)</li>
+                            <li>The callback URL requires 'code' and 'state' parameters from Google</li>
+                            <li>Check browser console for any CORS errors</li>
+                        </ul>
+                    `;
+                } else {
+                    document.getElementById('status').innerHTML = `<p>❌ Error: ${JSON.stringify(data)}</p>`;
+                }
+            } catch (error) {
+                document.getElementById('status').innerHTML = `<p>❌ Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Test on page load
+        testOAuthFlow();
+    </script>
+</body>
+</html>

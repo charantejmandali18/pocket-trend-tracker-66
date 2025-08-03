@@ -1,0 +1,113 @@
+server:
+  port: 8089
+
+spring:
+  application:
+    name: extraction-service
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/xpend_extraction
+    username: xpend_user
+    password: xpend_pass
+    driver-class-name: org.postgresql.Driver
+    
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    
+  config:
+    import:
+      - optional:file:./config/oauth-config.yml
+      - optional:file:../config/oauth-config.yml
+      - optional:classpath:oauth-config.yml
+
+# OAuth Configuration (loaded from external config file)
+oauth:
+  gmail:
+    client-id: ${GMAIL_CLIENT_ID:}
+    client-secret: ${GMAIL_CLIENT_SECRET:}
+    redirect-uri: ${GMAIL_REDIRECT_URI:http://localhost:3000/oauth/callback}
+  outlook:
+    client-id: ${OUTLOOK_CLIENT_ID:}
+    client-secret: ${OUTLOOK_CLIENT_SECRET:}
+    redirect-uri: ${OUTLOOK_REDIRECT_URI:http://localhost:8089/api/email-auth/callback/outlook}
+  security:
+    encryption-key: ${ENCRYPTION_KEY:default-encryption-key}
+    jwt-secret: ${JWT_SECRET:default-jwt-secret}
+
+# Encryption configuration
+# Services configuration
+services:
+  transaction-service:
+    url: ${SERVICES_TRANSACTION_SERVICE_URL:http://host.docker.internal:8082}
+
+jasypt:
+  encryptor:
+    password: ${oauth.security.encryption-key}
+    algorithm: PBEWITHHMACSHA512ANDAES_256
+    key-obtention-iterations: 1000
+    pool-size: 1
+    provider-name: SunJCE
+    salt-generator-classname: org.jasypt.salt.RandomSaltGenerator
+    string-output-type: base64
+
+# JWT Configuration
+jwt:
+  secret: ${oauth.security.jwt-secret}
+  expiration: 86400000 # 24 hours
+
+# Email extraction configuration
+extraction:
+  enabled: true
+  batch-size: 50
+  processing-interval: 300000 # 5 minutes
+  max-emails-per-run: 1000
+  days-back: 30
+  
+  # Bank email patterns for transaction detection
+  bank-domains:
+    - sbi.co.in
+    - hdfcbank.com
+    - icicibank.com
+    - axisbank.com
+    - kotak.com
+    - yesbank.in
+    - indusind.com
+    - pnb.co.in
+    - bankofbaroda.co.in
+    - canarabank.com
+    - unionbankofindia.co.in
+    - idfcfirstbank.com
+    - rbl.co.in
+    - sc.com
+    - citibank.co.in
+    - hsbc.co.in
+    - dbs.com
+    - americanexpress.com
+    - paytm.com
+    - phonepe.com
+    - gpay.com
+    - razorpay.com
+    - bharatpe.com
+    - cred.club
+
+# Logging
+logging:
+  level:
+    com.xpend.extraction: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.oauth2: DEBUG
+  file:
+    name: logs/extraction-service.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

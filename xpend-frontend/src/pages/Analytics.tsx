@@ -18,7 +18,7 @@ import {
   ArrowDown,
   Minus
 } from 'lucide-react';
-import { useApp } from '@/contexts/AppContext';
+// import { useApp } from '@/contexts/AppContext';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, subWeeks, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns';
 import { 
   getPersonalTransactions, 
@@ -73,7 +73,10 @@ interface ComparisonData {
 }
 
 const Analytics = () => {
-  const { user, isPersonalMode, currentGroup, dataVersion } = useApp();
+  const user = { id: 1 }; // Mock user
+  const isPersonalMode = true;
+  const currentGroup = null;
+  const dataVersion = 1;
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [viewType, setViewType] = useState<'week' | 'month'>('month');
   const [loading, setLoading] = useState(true);
