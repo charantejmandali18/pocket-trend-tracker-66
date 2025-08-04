@@ -360,10 +360,13 @@ export const getUserGroups = async (userId: string): Promise<StoredGroup[]> => {
         expense_groups (*)
       `)
       .eq('user_id', userId)
-      .eq('status', 'active');
+      .eq('status', 'accepted');
 
     if (error) throw error;
-    return data?.map(item => item.expense_groups).filter(Boolean) || [];
+    
+    // Type-safe extraction of group data
+    const groups = data?.map((item: any) => item.expense_groups).filter(Boolean) || [];
+    return groups as StoredGroup[];
   } catch (error) {
     console.error('Error fetching user groups:', error);
     return [];

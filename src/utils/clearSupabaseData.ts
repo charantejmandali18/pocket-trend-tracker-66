@@ -162,7 +162,7 @@ export const clearAllSupabaseData = async () => {
 };
 
 // Function to clear specific tables
-export const clearSpecificSupabaseTables = async (tables: string[]) => {
+export const clearSpecificSupabaseTables = async (tableNames: string[]) => {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -171,20 +171,34 @@ export const clearSpecificSupabaseTables = async (tables: string[]) => {
 
     const results = [];
 
-    for (const table of tables) {
+    // Type-safe table access
+    const validTables = [
+      'transactions', 'categories', 'expense_groups', 'accounts', 
+      'bank_balances', 'budget_items', 'credit_cards', 'fixed_expenses', 
+      'floating_expenses', 'group_invitations', 'group_members', 
+      'import_logs', 'income', 'insurance', 'investments', 'loans', 
+      'properties', 'recurring_templates', 'user_profiles', 'budget_plans'
+    ] as const;
+
+    for (const tableName of tableNames) {
+      if (!validTables.includes(tableName as any)) {
+        results.push(`❌ ${tableName}: Invalid table name`);
+        continue;
+      }
+      
       try {
-        const { error } = await supabase
-          .from(table)
+        const { error } = await (supabase as any)
+          .from(tableName)
           .delete()
           .eq('user_id', user.id);
         
         if (error) {
-          results.push(`❌ ${table}: ${error.message}`);
+          results.push(`❌ ${tableName}: ${error.message}`);
         } else {
-          results.push(`✅ ${table}: cleared`);
+          results.push(`✅ ${tableName}: cleared`);
         }
       } catch (err) {
-        results.push(`❌ ${table}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        results.push(`❌ ${tableName}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
 
