@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instanciate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "12.2.3 (519615d)"
+  }
   public: {
     Tables: {
       accounts: {
@@ -52,15 +57,37 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "accounts_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "expense_groups"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
+      }
+      bank_balances: {
+        Row: {
+          balance: number
+          bank_name: string
+          created_at: string
+          id: string
+          month_year: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          bank_name: string
+          created_at?: string
+          id?: string
+          month_year?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          bank_name?: string
+          created_at?: string
+          id?: string
+          month_year?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       budget_items: {
         Row: {
@@ -71,7 +98,7 @@ export type Database = {
           item_type: string
           name: string
           notes: string | null
-          planned_amount: number | null
+          planned_amount: number
           priority: string | null
         }
         Insert: {
@@ -82,7 +109,7 @@ export type Database = {
           item_type: string
           name: string
           notes?: string | null
-          planned_amount?: number | null
+          planned_amount?: number
           priority?: string | null
         }
         Update: {
@@ -93,7 +120,7 @@ export type Database = {
           item_type?: string
           name?: string
           notes?: string | null
-          planned_amount?: number | null
+          planned_amount?: number
           priority?: string | null
         }
         Relationships: [
@@ -110,7 +137,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "categories"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       budget_plans: {
@@ -120,7 +147,7 @@ export type Database = {
           group_id: string | null
           id: string
           month_year: string
-          name: string | null
+          name: string
           status: string | null
           total_expenses_planned: number | null
           total_income_planned: number | null
@@ -133,7 +160,7 @@ export type Database = {
           group_id?: string | null
           id?: string
           month_year: string
-          name?: string | null
+          name?: string
           status?: string | null
           total_expenses_planned?: number | null
           total_income_planned?: number | null
@@ -146,27 +173,19 @@ export type Database = {
           group_id?: string | null
           id?: string
           month_year?: string
-          name?: string | null
+          name?: string
           status?: string | null
           total_expenses_planned?: number | null
           total_income_planned?: number | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "budget_plans_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "expense_groups"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       categories: {
         Row: {
           color: string | null
-          created_at: string
+          created_at: string | null
           created_by: string | null
           group_id: string | null
           icon: string | null
@@ -178,7 +197,7 @@ export type Database = {
         }
         Insert: {
           color?: string | null
-          created_at?: string
+          created_at?: string | null
           created_by?: string | null
           group_id?: string | null
           icon?: string | null
@@ -190,7 +209,7 @@ export type Database = {
         }
         Update: {
           color?: string | null
-          created_at?: string
+          created_at?: string | null
           created_by?: string | null
           group_id?: string | null
           icon?: string | null
@@ -208,48 +227,143 @@ export type Database = {
             referencedRelation: "expense_groups"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "categories_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          }
         ]
+      }
+      credit_cards: {
+        Row: {
+          available_credit: number
+          card_name: string
+          created_at: string
+          credit_limit: number
+          id: string
+          month_year: string
+          outstanding_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          available_credit?: number
+          card_name: string
+          created_at?: string
+          credit_limit?: number
+          id?: string
+          month_year?: string
+          outstanding_amount?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          available_credit?: number
+          card_name?: string
+          created_at?: string
+          credit_limit?: number
+          id?: string
+          month_year?: string
+          outstanding_amount?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       expense_groups: {
         Row: {
-          created_at: string
+          created_at: string | null
           currency: string | null
           description: string | null
-          group_code: string | null
+          group_code: string
           id: string
           is_active: boolean | null
           name: string
           owner_id: string
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           currency?: string | null
           description?: string | null
-          group_code?: string | null
+          group_code: string
           id?: string
           is_active?: boolean | null
           name: string
           owner_id: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           currency?: string | null
           description?: string | null
-          group_code?: string | null
+          group_code?: string
           id?: string
           is_active?: boolean | null
           name?: string
           owner_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      fixed_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          due_date: number | null
+          expense_name: string
+          id: string
+          is_paid: boolean
+          month_year: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          due_date?: number | null
+          expense_name: string
+          id?: string
+          is_paid?: boolean
+          month_year?: string
           updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          due_date?: number | null
+          expense_name?: string
+          id?: string
+          is_paid?: boolean
+          month_year?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      floating_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          expense_name: string
+          id: string
+          month_year: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          expense_name: string
+          id?: string
+          month_year?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          expense_name?: string
+          id?: string
+          month_year?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -257,32 +371,32 @@ export type Database = {
         Row: {
           created_at: string
           email: string
-          expires_at: string | null
+          expires_at: string
           group_id: string
           id: string
           invited_by: string
           status: string | null
-          token: string | null
+          token: string
         }
         Insert: {
           created_at?: string
           email: string
-          expires_at?: string | null
+          expires_at?: string
           group_id: string
           id?: string
           invited_by: string
           status?: string | null
-          token?: string | null
+          token?: string
         }
         Update: {
           created_at?: string
           email?: string
-          expires_at?: string | null
+          expires_at?: string
           group_id?: string
           id?: string
           invited_by?: string
           status?: string | null
-          token?: string | null
+          token?: string
         }
         Relationships: [
           {
@@ -291,12 +405,12 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "expense_groups"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       group_members: {
         Row: {
-          created_at: string
+          created_at: string | null
           email: string
           group_id: string
           id: string
@@ -307,7 +421,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           email: string
           group_id: string
           id?: string
@@ -318,7 +432,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           email?: string
           group_id?: string
           id?: string
@@ -328,22 +442,14 @@ export type Database = {
           status?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "group_members_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "expense_groups"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       import_logs: {
         Row: {
           created_at: string
           errors: Json | null
           failed_rows: number | null
-          file_name: string
+          file_name: string | null
           group_id: string | null
           id: string
           import_type: string
@@ -356,7 +462,7 @@ export type Database = {
           created_at?: string
           errors?: Json | null
           failed_rows?: number | null
-          file_name: string
+          file_name?: string | null
           group_id?: string | null
           id?: string
           import_type: string
@@ -369,7 +475,7 @@ export type Database = {
           created_at?: string
           errors?: Json | null
           failed_rows?: number | null
-          file_name?: string
+          file_name?: string | null
           group_id?: string | null
           id?: string
           import_type?: string
@@ -385,8 +491,266 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "expense_groups"
             referencedColumns: ["id"]
-          }
+          },
         ]
+      }
+      income: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          month_year: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          month_year?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          month_year?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      insurance: {
+        Row: {
+          company_name: string
+          created_at: string | null
+          group_id: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          nominees: string[] | null
+          policy_end_date: string | null
+          policy_number: string
+          policy_start_date: string | null
+          policy_type: string
+          premium_amount: number
+          premium_due_date: number | null
+          premium_frequency: string
+          sum_assured: number
+          user_id: string
+        }
+        Insert: {
+          company_name: string
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          nominees?: string[] | null
+          policy_end_date?: string | null
+          policy_number: string
+          policy_start_date?: string | null
+          policy_type: string
+          premium_amount: number
+          premium_due_date?: number | null
+          premium_frequency: string
+          sum_assured: number
+          user_id: string
+        }
+        Update: {
+          company_name?: string
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          nominees?: string[] | null
+          policy_end_date?: string | null
+          policy_number?: string
+          policy_start_date?: string | null
+          policy_type?: string
+          premium_amount?: number
+          premium_due_date?: number | null
+          premium_frequency?: string
+          sum_assured?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      investments: {
+        Row: {
+          created_at: string | null
+          current_value: number
+          group_id: string | null
+          id: string
+          invested_amount: number
+          investment_type: string
+          is_active: boolean | null
+          lock_in_period: number | null
+          maturity_date: string | null
+          name: string
+          nav: number | null
+          platform: string
+          sip_amount: number | null
+          sip_date: number | null
+          units: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          current_value: number
+          group_id?: string | null
+          id?: string
+          invested_amount: number
+          investment_type: string
+          is_active?: boolean | null
+          lock_in_period?: number | null
+          maturity_date?: string | null
+          name: string
+          nav?: number | null
+          platform: string
+          sip_amount?: number | null
+          sip_date?: number | null
+          units?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          current_value?: number
+          group_id?: string | null
+          id?: string
+          invested_amount?: number
+          investment_type?: string
+          is_active?: boolean | null
+          lock_in_period?: number | null
+          maturity_date?: string | null
+          name?: string
+          nav?: number | null
+          platform?: string
+          sip_amount?: number | null
+          sip_date?: number | null
+          units?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      loans: {
+        Row: {
+          bank_name: string
+          created_at: string | null
+          current_balance: number
+          emi_amount: number
+          emi_date: number | null
+          end_date: string | null
+          group_id: string | null
+          id: string
+          interest_rate: number
+          is_active: boolean | null
+          loan_type: string
+          name: string
+          principal_amount: number
+          start_date: string | null
+          tenure_months: number
+          user_id: string
+        }
+        Insert: {
+          bank_name: string
+          created_at?: string | null
+          current_balance: number
+          emi_amount: number
+          emi_date?: number | null
+          end_date?: string | null
+          group_id?: string | null
+          id?: string
+          interest_rate: number
+          is_active?: boolean | null
+          loan_type: string
+          name: string
+          principal_amount: number
+          start_date?: string | null
+          tenure_months: number
+          user_id: string
+        }
+        Update: {
+          bank_name?: string
+          created_at?: string | null
+          current_balance?: number
+          emi_amount?: number
+          emi_date?: number | null
+          end_date?: string | null
+          group_id?: string | null
+          id?: string
+          interest_rate?: number
+          is_active?: boolean | null
+          loan_type?: string
+          name?: string
+          principal_amount?: number
+          start_date?: string | null
+          tenure_months?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      properties: {
+        Row: {
+          address: string
+          created_at: string | null
+          current_value: number
+          group_id: string | null
+          id: string
+          is_active: boolean | null
+          loan_account_id: string | null
+          maintenance_cost: number | null
+          name: string
+          ownership_percentage: number | null
+          property_tax: number | null
+          property_type: string
+          purchase_date: string | null
+          purchase_price: number
+          rental_income: number | null
+          user_id: string
+        }
+        Insert: {
+          address: string
+          created_at?: string | null
+          current_value: number
+          group_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          loan_account_id?: string | null
+          maintenance_cost?: number | null
+          name: string
+          ownership_percentage?: number | null
+          property_tax?: number | null
+          property_type: string
+          purchase_date?: string | null
+          purchase_price: number
+          rental_income?: number | null
+          user_id: string
+        }
+        Update: {
+          address?: string
+          created_at?: string | null
+          current_value?: number
+          group_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          loan_account_id?: string | null
+          maintenance_cost?: number | null
+          name?: string
+          ownership_percentage?: number | null
+          property_tax?: number | null
+          property_type?: string
+          purchase_date?: string | null
+          purchase_price?: number
+          rental_income?: number | null
+          user_id?: string
+        }
+        Relationships: []
       }
       recurring_templates: {
         Row: {
@@ -442,13 +806,6 @@ export type Database = {
             referencedRelation: "categories"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "recurring_templates_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "expense_groups"
-            referencedColumns: ["id"]
-          }
         ]
       }
       transactions: {
@@ -456,70 +813,66 @@ export type Database = {
           account_name: string | null
           amount: number
           budget_item_id: string | null
-          category_id: string
-          created_at: string
+          category_id: string | null
+          created_at: string | null
           created_by: string | null
           description: string
           external_id: string | null
           group_id: string | null
           id: string
           is_recurring: boolean | null
+          member_email: string | null
           notes: string | null
           payment_method: string | null
           source: string | null
-          transaction_date: string
+          transaction_date: string | null
           transaction_type: string
-          updated_at: string
+          updated_at: string | null
           user_id: string
         }
         Insert: {
           account_name?: string | null
           amount: number
           budget_item_id?: string | null
-          category_id: string
-          created_at?: string
+          category_id?: string | null
+          created_at?: string | null
           created_by?: string | null
           description: string
           external_id?: string | null
           group_id?: string | null
           id?: string
           is_recurring?: boolean | null
+          member_email?: string | null
           notes?: string | null
           payment_method?: string | null
           source?: string | null
-          transaction_date?: string
+          transaction_date?: string | null
           transaction_type: string
-          updated_at?: string
+          updated_at?: string | null
           user_id: string
         }
         Update: {
           account_name?: string | null
           amount?: number
           budget_item_id?: string | null
-          category_id?: string
-          created_at?: string
+          category_id?: string | null
+          created_at?: string | null
           created_by?: string | null
           description?: string
           external_id?: string | null
           group_id?: string | null
           id?: string
           is_recurring?: boolean | null
+          member_email?: string | null
           notes?: string | null
           payment_method?: string | null
           source?: string | null
-          transaction_date?: string
+          transaction_date?: string | null
           transaction_type?: string
-          updated_at?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "transactions_budget_item_id_fkey"
-            columns: ["budget_item_id"]
-            isOneToOne: false
-            referencedRelation: "budget_items"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "transactions_category_id_fkey"
             columns: ["category_id"]
@@ -533,56 +886,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "expense_groups"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       user_profiles: {
         Row: {
           avatar_url: string | null
-          created_at: string
+          created_at: string | null
           default_group_id: string | null
           email: string
           full_name: string | null
           id: string
           preferences: Json | null
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
           avatar_url?: string | null
-          created_at?: string
+          created_at?: string | null
           default_group_id?: string | null
           email: string
           full_name?: string | null
           id: string
           preferences?: Json | null
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
           avatar_url?: string | null
-          created_at?: string
+          created_at?: string | null
           default_group_id?: string | null
           email?: string
           full_name?: string | null
           id?: string
           preferences?: Json | null
-          updated_at?: string
+          updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_profiles_default_group_id_fkey"
-            columns: ["default_group_id"]
-            isOneToOne: false
-            referencedRelation: "expense_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_profiles_id_fkey"
-            columns: ["id"]
-            isOneToOne: true
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
     }
     Views: {
@@ -600,27 +938,33 @@ export type Database = {
   }
 }
 
-type PublicSchema = Database[Extract<keyof Database, "public">]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
-  PublicTableNameOrOptions extends
-    | keyof (PublicSchema["Tables"] & PublicSchema["Views"])
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
-        Database[PublicTableNameOrOptions["schema"]]["Views"])
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
-      Database[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
     : never
-  : PublicTableNameOrOptions extends keyof (PublicSchema["Tables"] &
-        PublicSchema["Views"])
-    ? (PublicSchema["Tables"] &
-        PublicSchema["Views"])[PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R
       }
       ? R
@@ -628,20 +972,24 @@ export type Tables<
     : never
 
 export type TablesInsert<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
     : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Insert: infer I
       }
       ? I
@@ -649,20 +997,24 @@ export type TablesInsert<
     : never
 
 export type TablesUpdate<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
     : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Update: infer U
       }
       ? U
@@ -670,14 +1022,41 @@ export type TablesUpdate<
     : never
 
 export type Enums<
-  PublicEnumNameOrOptions extends
-    | keyof PublicSchema["Enums"]
-    | { schema: keyof Database },
-  EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = PublicEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
-    ? PublicSchema["Enums"][PublicEnumNameOrOptions]
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
