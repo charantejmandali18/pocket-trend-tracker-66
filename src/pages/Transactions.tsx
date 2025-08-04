@@ -181,7 +181,7 @@ const Transactions = () => {
       payment_method: transaction.payment_method || '',
       account_name: transaction.account_name || '',
       notes: transaction.notes || '',
-      transaction_type: transaction.transaction_type
+      transaction_type: transaction.transaction_type as 'income' | 'expense'
     });
     setShowEditDialog(true);
   };

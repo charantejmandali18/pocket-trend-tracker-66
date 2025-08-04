@@ -41,7 +41,15 @@ const ClearDataButton = () => {
       
       setDataCounts({
         localStorage: localStorageKeys.length,
-        supabase: supabaseResult.success ? supabaseResult.counts : {
+        supabase: supabaseResult.success ? {
+          transactions: supabaseResult.counts.transactions || 0,
+          accounts: supabaseResult.counts.accounts || 0,
+          groups_owned: supabaseResult.counts.groups_owned || 0,
+          group_memberships: supabaseResult.counts.group_memberships || 0,
+          user_categories: supabaseResult.counts.user_categories || 0,
+          budget_plans: supabaseResult.counts.budget_plans || 0,
+          recurring_templates: supabaseResult.counts.recurring_templates || 0
+        } : {
           transactions: 0,
           accounts: 0,
           groups_owned: 0,

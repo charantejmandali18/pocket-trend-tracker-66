@@ -254,7 +254,7 @@ export const getUserGroups = (userId: string): StoredGroup[] => {
   return allGroups.filter(g => userGroupIds.includes(g.id) && g.is_active);
 };
 
-export const addStoredGroup = (group: Omit<StoredGroup, 'id' | 'group_code' | 'created_at' | 'members'>): StoredGroup => {
+export const addStoredGroup = (group: Omit<StoredGroup, 'id' | 'group_code' | 'created_at' | 'members' | 'is_active'>): StoredGroup => {
   const groups = getStoredGroups();
   const memberships = getGroupMemberships();
   

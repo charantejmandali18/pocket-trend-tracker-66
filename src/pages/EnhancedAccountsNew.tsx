@@ -548,7 +548,8 @@ const EnhancedAccountsNew = () => {
         moratorium_period_months: 0,
         moratorium_end_date: '',
         is_in_moratorium: false,
-        possession_date: ''
+        possession_date: '',
+        actual_moratorium_emi: 0
       });
 
       // Close dialog and refresh data
@@ -704,7 +705,8 @@ const EnhancedAccountsNew = () => {
         moratorium_period_months: 0,
         moratorium_end_date: '',
         is_in_moratorium: false,
-        possession_date: ''
+        possession_date: '',
+        actual_moratorium_emi: 0
       });
       setShowEditAccount(false);
       

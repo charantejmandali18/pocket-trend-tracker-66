@@ -334,7 +334,7 @@ const Planning = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="type">Type</Label>
-                  <Select value={newItem.type} onValueChange={(value: 'income' | 'expense') => setNewItem({...newItem, type: value})}>
+                  <Select value={newItem.type} onValueChange={(value: string) => setNewItem({...newItem, type: value as 'expense'})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
