@@ -181,11 +181,6 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   return (
     <div>
       <div className="fixed top-4 right-4 z-10 flex items-center space-x-2">
-        {STORAGE_CONFIG.USE_LOCAL_STORAGE && (
-          <div className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded text-xs font-medium">
-            Local Storage Mode
-          </div>
-        )}
         <Button onClick={handleSignOut} variant="outline" size="sm">
           Sign Out
         </Button>
