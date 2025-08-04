@@ -387,7 +387,7 @@ const Planning = () => {
 
                 <div>
                   <Label htmlFor="priority">Priority</Label>
-                  <Select value={newItem.priority} onValueChange={(value: 'high' | 'medium' | 'low') => setNewItem({...newItem, priority: value})}>
+                  <Select value={newItem.priority} onValueChange={(value: string) => setNewItem({...newItem, priority: value as 'medium'})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

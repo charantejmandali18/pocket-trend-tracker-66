@@ -319,8 +319,16 @@ export const findOrCreateStoredCategory = async (name: string, color?: string): 
     // Create new category
     const colors = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899'];
     const defaultColor = color || colors[Math.floor(Math.random() * colors.length)];
-
-    return addStoredCategory({ name, color: defaultColor });
+    
+    return addStoredCategory({ 
+      name, 
+      color: defaultColor, 
+      icon: 'circle',
+      group_id: null,
+      created_by: user.id,
+      is_system: false,
+      parent_id: null
+    });
   } catch (error) {
     console.error('Error finding/creating category:', error);
     return null;

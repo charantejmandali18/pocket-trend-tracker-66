@@ -321,7 +321,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         : await addSupabaseCategory({
             name,
             color,
-            icon: icon || 'circle'
+            icon: icon || 'circle',
+            group_id: currentGroup?.id || null,
+            created_by: user.id,
+            is_system: false,
+            parent_id: null
           });
 
       if (newCategory) {

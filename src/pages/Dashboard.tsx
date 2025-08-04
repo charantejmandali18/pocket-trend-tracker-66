@@ -62,6 +62,11 @@ interface DashboardData {
     projectedMonthEndBalance: number;
     budgetStatus: 'under' | 'on_track' | 'over' | 'danger';
   };
+
+  // Optional projections property for backwards compatibility
+  projections?: {
+    [key: string]: any;
+  };
 }
 
 interface CategorySummary {
