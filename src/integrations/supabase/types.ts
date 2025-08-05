@@ -442,7 +442,15 @@ export type Database = {
           status?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_group_members_group_id"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "expense_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       import_logs: {
         Row: {
@@ -927,7 +935,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_group_memberships: {
+        Args: { user_uuid: string }
+        Returns: {
+          group_id: string
+          status: string
+          role: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

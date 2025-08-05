@@ -33,24 +33,24 @@ import {
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { 
-  getFinancialAccounts, 
-  addFinancialAccount, 
-  updateFinancialAccount, 
-  deleteFinancialAccount,
-  getStoredTransactions,
-  type FinancialAccount,
-  type GroupAssetSplit 
-} from '@/utils/storageService';
+import { getStoredTransactions } from '@/utils/storageService';
+import { supabase } from '@/integrations/supabase/client';
 
-// Import local storage functions that don't exist in storageService yet
-import {
-  getPersonalFinancialAccounts,
-  getGroupFinancialAccounts,
-  getUserGroupAssetValue,
-  shareAssetWithGroup,
-  calculateAssetSplits
-} from '@/utils/dataStorage';
+// Account type definition based on Supabase accounts table
+interface Account {
+  id: string;
+  user_id: string;
+  group_id?: string;
+  name: string;
+  account_type: 'savings' | 'checking' | 'credit_card' | 'loan' | 'investment' | 'cash' | 'real_estate' | 'vehicle' | 'other';
+  bank_name?: string;
+  account_number_masked?: string;
+  balance: number;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 const Accounts = () => {
   console.log('Accounts component rendering...');
@@ -58,26 +58,17 @@ const Accounts = () => {
   const { user, isPersonalMode, currentGroup, userGroups, dataVersion, refreshData } = useApp();
   const { toast } = useToast();
   
-  const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [showAddAccount, setShowAddAccount] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [newAccount, setNewAccount] = useState({
     name: '',
-    type: 'savings' as FinancialAccount['type'],
+    account_type: 'savings' as Account['account_type'],
     bank_name: '',
-    account_number: '',
+    account_number_masked: '',
     balance: 0,
-    credit_limit: 0,
-    interest_rate: 0
   });
   const [loading, setLoading] = useState(true);
-  
-  // Group sharing state
-  const [showGroupShareDialog, setShowGroupShareDialog] = useState(false);
-  const [accountToShare, setAccountToShare] = useState<FinancialAccount | null>(null);
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
-  const [splitType, setSplitType] = useState<'pool' | 'equal' | 'fractional' | 'custom'>('pool');
-  const [splitDetails, setSplitDetails] = useState<Array<{user_id: string, user_email: string, percentage?: number, fixed_amount?: number}>>([]);
 
   useEffect(() => {
     fetchAccounts();
@@ -90,43 +81,29 @@ const Accounts = () => {
       console.log('fetchAccounts called', { user: user.id, isPersonalMode, currentGroup });
       setLoading(true);
       
-      let storedAccounts: FinancialAccount[] = [];
+      let query = supabase
+        .from('accounts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
       
       if (isPersonalMode) {
-        console.log('Getting personal accounts...');
-        // Personal mode: get personal accounts + user's share of group assets
-        const personalAccounts = getPersonalFinancialAccounts(user.id);
-        console.log('Personal accounts:', personalAccounts.length);
-        const groupAssets: FinancialAccount[] = [];
-        
-        // Add user's share of group assets as virtual accounts
-        userGroups.forEach(group => {
-          const groupAccounts = getGroupFinancialAccounts(group.id);
-          groupAccounts.forEach(account => {
-            if (account.is_shared && account.split_details) {
-              const userSplit = account.split_details.find(split => split.user_id === user.id);
-              if (userSplit) {
-                groupAssets.push({
-                  ...account,
-                  id: `${account.id}_split_${user.id}`,
-                  name: `${account.name} (${group.name} Share)`,
-                  balance: userSplit.split_value,
-                  is_shared: true
-                });
-              }
-            }
-          });
-        });
-        
-        storedAccounts = [...personalAccounts, ...groupAssets];
+        // Personal mode: get only personal accounts (no group_id)
+        query = query.is('group_id', null);
       } else if (currentGroup) {
-        console.log('Getting group accounts...');
-        // Group mode: get group accounts + personal accounts that are shared with this group
-        storedAccounts = getGroupFinancialAccounts(currentGroup.id);
+        // Group mode: get accounts for this specific group
+        query = query.eq('group_id', currentGroup.id);
       }
       
-      console.log('Final accounts:', storedAccounts.length);
-      setAccounts(storedAccounts);
+      const { data, error } = await query.order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching accounts:', error);
+        throw error;
+      }
+      
+      console.log('Fetched accounts:', data?.length || 0);
+      setAccounts((data || []) as Account[]);
     } catch (error) {
       console.error('Error fetching accounts:', error);
       toast({
@@ -151,40 +128,41 @@ const Accounts = () => {
 
     try {
       console.log('Adding account:', newAccount);
-      const account = await addFinancialAccount({
-        user_id: user.id,
-        group_id: isPersonalMode ? null : currentGroup?.id,
-        name: newAccount.name.trim(),
-        type: newAccount.type,
-        bank_name: newAccount.bank_name.trim() || undefined,
-        account_number: newAccount.account_number.trim() || undefined,
-        balance: newAccount.balance || 0,
-        credit_limit: newAccount.type === 'credit_card' ? newAccount.credit_limit : undefined,
-        interest_rate: newAccount.interest_rate || undefined,
-        is_active: true
-      });
       
-      console.log('Account added:', account);
+      const { data, error } = await supabase
+        .from('accounts')
+        .insert({
+          user_id: user.id,
+          group_id: isPersonalMode ? null : currentGroup?.id,
+          name: newAccount.name.trim(),
+          account_type: newAccount.account_type,
+          bank_name: newAccount.bank_name.trim() || null,
+          account_number_masked: newAccount.account_number_masked.trim() || null,
+          balance: newAccount.balance || 0,
+          currency: 'INR',
+          is_active: true
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error adding account:', error);
+        throw error;
+      }
+      
+      console.log('Account added:', data);
 
       setNewAccount({
         name: '',
-        type: 'savings',
+        account_type: 'savings',
         bank_name: '',
-        account_number: '',
+        account_number_masked: '',
         balance: 0,
-        credit_limit: 0,
-        interest_rate: 0
       });
       setShowAddAccount(false);
       
-      // If in personal mode and user has groups, ask if they want to share
-      if (isPersonalMode && userGroups.length > 0) {
-        setAccountToShare(account);
-        setShowGroupShareDialog(true);
-      } else {
-        fetchAccounts();
-        refreshData();
-      }
+      fetchAccounts();
+      refreshData();
       
       toast({
         title: "Success",
@@ -204,9 +182,26 @@ const Accounts = () => {
     if (!editingAccount) return;
 
     try {
-      const updated = await updateFinancialAccount(editingAccount.id, editingAccount);
-      if (updated) {
-        setAccounts(prev => prev.map(a => a.id === updated.id ? updated : a));
+      const { data, error } = await supabase
+        .from('accounts')
+        .update({
+          name: editingAccount.name,
+          bank_name: editingAccount.bank_name,
+          account_number_masked: editingAccount.account_number_masked,
+          balance: editingAccount.balance,
+        })
+        .eq('id', editingAccount.id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating account:', error);
+        throw error;
+      }
+      
+      if (data) {
+        setAccounts(prev => prev.map(a => a.id === data.id ? data as Account : a));
         setEditingAccount(null);
         
         toast({
@@ -226,7 +221,17 @@ const Accounts = () => {
 
   const handleDeleteAccount = async (accountId: string) => {
     try {
-      await deleteFinancialAccount(accountId);
+      const { error } = await supabase
+        .from('accounts')
+        .update({ is_active: false })
+        .eq('id', accountId)
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('Error deleting account:', error);
+        throw error;
+      }
+      
       setAccounts(prev => prev.filter(a => a.id !== accountId));
       
       toast({
@@ -282,7 +287,7 @@ const Accounts = () => {
 
   const getTotalBalance = () => {
     return accounts.reduce((sum, account) => {
-      if (account.type === 'credit_card' || account.type === 'loan') {
+      if (account.account_type === 'credit_card' || account.account_type === 'loan') {
         return sum - account.balance; // Negative for debts
       }
       return sum + account.balance;
@@ -291,27 +296,28 @@ const Accounts = () => {
 
   const getTotalAssets = () => {
     return accounts
-      .filter(a => !['credit_card', 'loan'].includes(a.type))
+      .filter(a => !['credit_card', 'loan'].includes(a.account_type))
       .reduce((sum, a) => sum + a.balance, 0);
   };
 
   const getTotalLiabilities = () => {
     return accounts
-      .filter(a => ['credit_card', 'loan'].includes(a.type))
+      .filter(a => ['credit_card', 'loan'].includes(a.account_type))
       .reduce((sum, a) => sum + a.balance, 0);
   };
 
   const getCreditUtilization = () => {
-    const creditCards = accounts.filter(a => a.type === 'credit_card');
+    const creditCards = accounts.filter(a => a.account_type === 'credit_card');
     if (creditCards.length === 0) return 0;
     
     const totalUsed = creditCards.reduce((sum, a) => sum + a.balance, 0);
-    const totalLimit = creditCards.reduce((sum, a) => sum + (a.credit_limit || 0), 0);
+    // For now, assume credit limit is balance * 2 (we'll need to add credit_limit column later)
+    const totalLimit = creditCards.reduce((sum, a) => sum + (a.balance * 2), 0);
     
     return totalLimit > 0 ? (totalUsed / totalLimit) * 100 : 0;
   };
 
-  const getAccountTypeIcon = (type: FinancialAccount['type']) => {
+  const getAccountTypeIcon = (type: Account['account_type']) => {
     switch (type) {
       case 'savings':
       case 'checking':
@@ -333,7 +339,7 @@ const Accounts = () => {
     }
   };
 
-  const getAccountTypeColor = (type: FinancialAccount['type']) => {
+  const getAccountTypeColor = (type: Account['account_type']) => {
     switch (type) {
       case 'savings': return 'text-green-600';
       case 'checking': return 'text-blue-600';
@@ -358,79 +364,6 @@ const Accounts = () => {
     { value: 'vehicle', label: 'Vehicle', category: 'asset' },
     { value: 'other', label: 'Other', category: 'other' }
   ];
-
-  const handleShareWithGroups = async () => {
-    if (!accountToShare || selectedGroups.length === 0) return;
-
-    try {
-      for (const groupId of selectedGroups) {
-        const group = userGroups.find(g => g.id === groupId);
-        if (!group) continue;
-
-        if (splitType === 'pool') {
-          // Add to Pool: Create a group account with the same balance
-          // Keep the original personal account, and create a linked group account
-          const groupAccount = await addFinancialAccount({
-            user_id: user.id,
-            group_id: groupId,
-            name: `${accountToShare.name} (Pool Contribution)`,
-            type: accountToShare.type,
-            bank_name: accountToShare.bank_name,
-            account_number: accountToShare.account_number,
-            balance: accountToShare.balance,
-            credit_limit: accountToShare.credit_limit,
-            interest_rate: accountToShare.interest_rate,
-            is_active: true,
-            // Mark this as a pool contribution
-            is_pool_contribution: true,
-            linked_personal_account: accountToShare.id
-          });
-
-          // Update the original account to mark it as contributed to pool
-          await updateFinancialAccount(accountToShare.id, {
-            ...accountToShare,
-            contributed_to_pools: [...(accountToShare.contributed_to_pools || []), groupId]
-          });
-        } else {
-          // Original sharing logic for splits
-          const mockMembers = [
-            { user_id: user.id, user_email: user.email || '', percentage: 50 },
-            { user_id: 'other_user', user_email: 'other@example.com', percentage: 50 }
-          ];
-
-          const splits = calculateAssetSplits(accountToShare.balance, splitType, mockMembers);
-          shareAssetWithGroup(accountToShare.id, groupId, splitType, splits);
-        }
-      }
-
-      setShowGroupShareDialog(false);
-      setAccountToShare(null);
-      setSelectedGroups([]);
-      fetchAccounts();
-      refreshData();
-
-      const action = splitType === 'pool' ? 'added to pool for' : 'shared with';
-      toast({
-        title: "Success",
-        description: `Account ${action} ${selectedGroups.length} group(s)`,
-      });
-    } catch (error) {
-      console.error('Error sharing asset with groups:', error);
-      toast({
-        title: "Error",
-        description: "Failed to share asset with groups",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleSkipGroupSharing = () => {
-    setShowGroupShareDialog(false);
-    setAccountToShare(null);
-    setSelectedGroups([]);
-    fetchAccounts();
-    refreshData();
-  };
 
   if (loading) {
     return (
@@ -483,7 +416,7 @@ const Accounts = () => {
               </div>
               <div>
                 <Label htmlFor="type">Account Type</Label>
-                <Select value={newAccount.type} onValueChange={(value) => setNewAccount({ ...newAccount, type: value as FinancialAccount['type'] })}>
+                <Select value={newAccount.account_type} onValueChange={(value) => setNewAccount({ ...newAccount, account_type: value as Account['account_type'] })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -515,18 +448,6 @@ const Accounts = () => {
                   placeholder="0"
                 />
               </div>
-              {newAccount.type === 'credit_card' && (
-                <div>
-                  <Label htmlFor="credit_limit">Credit Limit (₹)</Label>
-                  <Input
-                    id="credit_limit"
-                    type="number"
-                    value={newAccount.credit_limit}
-                    onChange={(e) => setNewAccount({ ...newAccount, credit_limit: parseFloat(e.target.value) || 0 })}
-                    placeholder="0"
-                  />
-                </div>
-              )}
               <Button onClick={handleAddAccount} className="w-full">
                 Add Account
               </Button>
@@ -620,8 +541,8 @@ const Accounts = () => {
               <div className="space-y-4">
                 {accounts.length > 0 ? (
                   accounts.map((account) => {
-                    const IconComponent = getAccountTypeIcon(account.type);
-                    const colorClass = getAccountTypeColor(account.type);
+                    const IconComponent = getAccountTypeIcon(account.account_type);
+                    const colorClass = getAccountTypeColor(account.account_type);
                     const { expenses, income, netFlow } = getAccountSpending(account.name);
                     
                     return (
@@ -634,19 +555,8 @@ const Accounts = () => {
                             <div className="flex items-center space-x-2">
                               <span className="font-medium text-lg">{account.name}</span>
                               <Badge variant="outline">
-                                {accountTypes.find(t => t.value === account.type)?.label}
+                                {accountTypes.find(t => t.value === account.account_type)?.label}
                               </Badge>
-                              {account.is_pool_contribution && (
-                                <Badge variant="default" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                  <Users className="h-3 w-3 mr-1" />
-                                  Pool
-                                </Badge>
-                              )}
-                              {account.contributed_to_pools && account.contributed_to_pools.length > 0 && (
-                                <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                  Contributing to {account.contributed_to_pools.length} pool(s)
-                                </Badge>
-                              )}
                             </div>
                             <div className="text-sm text-gray-500 space-x-4">
                               {account.bank_name && (
@@ -655,8 +565,8 @@ const Accounts = () => {
                                   {account.bank_name}
                                 </span>
                               )}
-                              {account.account_number && (
-                                <span>••••{account.account_number.slice(-4)}</span>
+                              {account.account_number_masked && (
+                                <span>••••{account.account_number_masked.slice(-4)}</span>
                               )}
                             </div>
                             <div className="text-xs text-gray-400 mt-1 space-x-4">
@@ -677,19 +587,9 @@ const Accounts = () => {
                         </div>
                         <div className="flex items-center space-x-6">
                           <div className="text-right">
-                            <div className={`text-lg font-semibold ${['credit_card', 'loan'].includes(account.type) ? 'text-red-600' : 'text-green-600'}`}>
-                              {['credit_card', 'loan'].includes(account.type) ? '-' : '+'}₹{account.balance.toLocaleString()}
+                            <div className={`text-lg font-semibold ${['credit_card', 'loan'].includes(account.account_type) ? 'text-red-600' : 'text-green-600'}`}>
+                              {['credit_card', 'loan'].includes(account.account_type) ? '-' : '+'}₹{account.balance.toLocaleString()}
                             </div>
-                            {account.type === 'credit_card' && account.credit_limit && (
-                              <div className="text-xs text-gray-500">
-                                Limit: ₹{account.credit_limit.toLocaleString()}
-                              </div>
-                            )}
-                            {account.interest_rate && (
-                              <div className="text-xs text-gray-500">
-                                {account.interest_rate}% APR
-                              </div>
-                            )}
                           </div>
                           <div className="flex space-x-1">
                             <Button 
@@ -744,7 +644,7 @@ const Accounts = () => {
               <CardContent>
                 <div className="space-y-3">
                   {accountTypes.map((type) => {
-                    const typeAccounts = accounts.filter(a => a.type === type.value);
+                    const typeAccounts = accounts.filter(a => a.account_type === type.value);
                     const typeBalance = typeAccounts.reduce((sum, a) => sum + a.balance, 0);
                     const percentage = totalAssets > 0 ? (typeBalance / totalAssets) * 100 : 0;
                     
@@ -792,10 +692,10 @@ const Accounts = () => {
                   
                   <div className="pt-4 border-t">
                     <div className="text-sm font-medium mb-2">Credit Accounts</div>
-                    {accounts.filter(a => a.type === 'credit_card').map((card) => (
+                    {accounts.filter(a => a.account_type === 'credit_card').map((card) => (
                       <div key={card.id} className="flex justify-between text-sm py-1">
                         <span>{card.name}</span>
-                        <span>₹{card.balance.toLocaleString()} / ₹{(card.credit_limit || 0).toLocaleString()}</span>
+                        <span>₹{card.balance.toLocaleString()}</span>
                       </div>
                     ))}
                   </div>
@@ -874,7 +774,7 @@ const Accounts = () => {
                     </Alert>
                   )}
                   
-                  {accounts.filter(a => a.type === 'savings').length === 0 && (
+                  {accounts.filter(a => a.account_type === 'savings').length === 0 && (
                     <Alert>
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>
@@ -923,17 +823,14 @@ const Accounts = () => {
                   onChange={(e) => setEditingAccount({ ...editingAccount, balance: parseFloat(e.target.value) || 0 })}
                 />
               </div>
-              {editingAccount.type === 'credit_card' && (
-                <div>
-                  <Label htmlFor="edit-credit-limit">Credit Limit (₹)</Label>
-                  <Input
-                    id="edit-credit-limit"
-                    type="number"
-                    value={editingAccount.credit_limit || 0}
-                    onChange={(e) => setEditingAccount({ ...editingAccount, credit_limit: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-              )}
+              <div>
+                <Label htmlFor="edit-bank">Bank/Institution</Label>
+                <Input
+                  id="edit-bank"
+                  value={editingAccount.bank_name || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, bank_name: e.target.value })}
+                />
+              </div>
               <Button onClick={handleUpdateAccount} className="w-full">
                 Update Account
               </Button>
@@ -941,83 +838,6 @@ const Accounts = () => {
           </DialogContent>
         </Dialog>
       )}
-
-      {/* Group Sharing Dialog */}
-      <Dialog open={showGroupShareDialog} onOpenChange={setShowGroupShareDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Share Asset with Groups</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600 mb-3">
-                Would you like to share "{accountToShare?.name}" with any of your groups?
-              </p>
-              
-              <Label>Select Groups</Label>
-              <div className="space-y-2 mt-2">
-                {userGroups.map((group) => (
-                  <label key={group.id} className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedGroups.includes(group.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedGroups([...selectedGroups, group.id]);
-                        } else {
-                          setSelectedGroups(selectedGroups.filter(id => id !== group.id));
-                        }
-                      }}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{group.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {selectedGroups.length > 0 && (
-              <div>
-                <Label>Split Type</Label>
-                <Select value={splitType} onValueChange={(value) => setSplitType(value as 'pool' | 'equal' | 'fractional' | 'custom')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pool">Add to Group Pool</SelectItem>
-                    <SelectItem value="equal">Equal Split</SelectItem>
-                    <SelectItem value="fractional">Percentage Split</SelectItem>
-                    <SelectItem value="custom">Custom Amount</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {splitType === 'pool' && 'Add your account balance to group pool. Keeps your personal account and adds to group funds.'}
-                  {splitType === 'equal' && 'Asset will be split equally among all group members'}
-                  {splitType === 'fractional' && 'Define percentage ownership for each member'}
-                  {splitType === 'custom' && 'Set specific amounts for each member'}
-                </p>
-              </div>
-            )}
-
-            <div className="flex space-x-2">
-              <Button 
-                onClick={handleShareWithGroups} 
-                disabled={selectedGroups.length === 0}
-                className="flex-1"
-              >
-                {splitType === 'pool' ? 'Add to Pool' : 'Share Asset'}
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={handleSkipGroupSharing}
-                className="flex-1"
-              >
-                Skip
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
