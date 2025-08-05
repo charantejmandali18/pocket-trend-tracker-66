@@ -25,14 +25,17 @@ import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Tables } from '@/integrations/supabase/types';
+// Import from unified storage service
 import { 
-  getStoredTransactions, 
-  getStoredCategories, 
+  getStoredTransactions,
   getPersonalTransactions, 
   getGroupTransactions,
   deleteStoredTransaction,
-  updateStoredTransaction
-} from '@/utils/dataStorage';
+  updateStoredTransaction,
+  getFinancialAccounts,
+  updateFinancialAccount,
+  type FinancialAccount
+} from '@/utils/storageService';
 
 type Transaction = Tables<'transactions'> & {
   categories: Tables<'categories'>;
@@ -59,6 +62,7 @@ const Transactions = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [editForm, setEditForm] = useState({
     description: '',
     amount: '',
@@ -67,7 +71,7 @@ const Transactions = () => {
     payment_method: '',
     account_name: '',
     notes: '',
-    transaction_type: 'expense' as 'income' | 'expense'
+    transaction_type: 'debit' as 'credit' | 'debit'
   });
 
   const [filters, setFilters] = useState<FilterState>({
@@ -82,8 +86,70 @@ const Transactions = () => {
   useEffect(() => {
     if (user) {
       fetchTransactions();
+      fetchAccounts();
     }
   }, [user, isPersonalMode, currentGroup, dataVersion]);
+
+  const fetchAccounts = async () => {
+    if (!user) return;
+
+    try {
+      const allAccounts = await getFinancialAccounts();
+      
+      let userAccounts: FinancialAccount[] = [];
+      if (isPersonalMode) {
+        userAccounts = allAccounts.filter(a => 
+          a.user_id === user.id && 
+          (a.group_id === null || a.group_id === undefined) &&
+          a.is_active
+        );
+      } else if (currentGroup) {
+        userAccounts = allAccounts.filter(a => 
+          a.group_id === currentGroup.id &&
+          a.is_active
+        );
+      }
+      
+      setAccounts(userAccounts);
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
+    }
+  };
+
+  const updateAccountBalance = async (accountName: string, amount: number, transactionType: 'credit' | 'debit') => {
+    try {
+      const account = accounts.find(a => a.name === accountName);
+      if (!account) {
+        console.error('Account not found:', accountName);
+        return false;
+      }
+
+      let newBalance;
+      if (account.type === 'credit_card') {
+        // For credit cards: debit increases outstanding balance, credit decreases it
+        if (transactionType === 'debit') {
+          newBalance = account.balance + amount; // Increase outstanding amount
+        } else {
+          newBalance = account.balance - amount; // Decrease outstanding amount (payment)
+        }
+      } else {
+        // For regular accounts: debit decreases balance, credit increases it
+        if (transactionType === 'debit') {
+          newBalance = account.balance - amount; // Money going out
+        } else {
+          newBalance = account.balance + amount; // Money coming in
+        }
+      }
+
+      console.log(`💰 Updating ${account.type} account ${accountName}: ${account.balance} -> ${newBalance} (${transactionType} ₹${amount})`);
+
+      const result = await updateFinancialAccount(account.id, { balance: newBalance });
+      return result !== null;
+    } catch (error) {
+      console.error('Error updating account balance:', error);
+      return false;
+    }
+  };
 
   useEffect(() => {
     applyFilters();
@@ -98,14 +164,14 @@ const Transactions = () => {
       // Get transactions based on mode
       let filteredData;
       if (isPersonalMode) {
-        filteredData = getPersonalTransactions(user.id, user.email);
+        filteredData = await getPersonalTransactions(user.id, user.email);
       } else if (currentGroup) {
-        filteredData = getGroupTransactions(currentGroup.id);
+        filteredData = await getGroupTransactions(currentGroup.id);
       } else {
         filteredData = [];
       }
       
-      // No mock data - start with clean state
+      console.log('🔍 Transactions fetched:', filteredData.length, 'transactions');
 
       setTransactions(filteredData);
     } catch (error) {
@@ -181,7 +247,7 @@ const Transactions = () => {
       payment_method: transaction.payment_method || '',
       account_name: transaction.account_name || '',
       notes: transaction.notes || '',
-      transaction_type: transaction.transaction_type as 'income' | 'expense'
+      transaction_type: transaction.transaction_type as 'credit' | 'debit'
     });
     setShowEditDialog(true);
   };
@@ -190,27 +256,58 @@ const Transactions = () => {
     if (!editingTransaction) return;
 
     try {
+      const originalTransaction = editingTransaction;
+      const newAmount = parseFloat(editForm.amount);
+      const newTransactionType = editForm.transaction_type as 'credit' | 'debit';
+      const newAccountName = editForm.account_name;
+
+      // Check if balance-affecting fields changed
+      const amountChanged = originalTransaction.amount !== newAmount;
+      const typeChanged = originalTransaction.transaction_type !== newTransactionType;
+      const accountChanged = originalTransaction.account_name !== newAccountName;
+
+      if (amountChanged || typeChanged || accountChanged) {
+        // Reverse the original transaction's effect if it had an account
+        if (originalTransaction.account_name) {
+          await updateAccountBalance(
+            originalTransaction.account_name,
+            originalTransaction.amount,
+            originalTransaction.transaction_type === 'debit' ? 'credit' : 'debit'
+          );
+        }
+
+        // Apply the new transaction's effect if it has an account
+        if (newAccountName) {
+          await updateAccountBalance(
+            newAccountName,
+            newAmount,
+            newTransactionType
+          );
+        }
+      }
+
       const updates = {
         description: editForm.description,
-        amount: parseFloat(editForm.amount),
+        amount: newAmount,
         category_id: editForm.category_id,
         transaction_date: editForm.transaction_date,
         payment_method: editForm.payment_method,
-        account_name: editForm.account_name,
+        account_name: newAccountName,
         notes: editForm.notes,
-        transaction_type: editForm.transaction_type
+        transaction_type: newTransactionType
       };
 
-      const success = updateStoredTransaction(editingTransaction.id, updates);
+      const success = await updateStoredTransaction(editingTransaction.id, updates);
       
       if (success) {
         toast({
           title: "Success",
-          description: "Transaction updated successfully",
+          description: "Transaction updated successfully and account balances updated",
         });
         setShowEditDialog(false);
         setEditingTransaction(null);
         fetchTransactions();
+        fetchAccounts(); // Refresh accounts to show updated balances
         refreshData();
       } else {
         throw new Error('Failed to update transaction');
@@ -227,14 +324,27 @@ const Transactions = () => {
 
   const handleDelete = async (transactionId: string) => {
     try {
-      const success = deleteStoredTransaction(transactionId);
+      // Find the transaction to get its details for balance reversal
+      const transactionToDelete = transactions.find(t => t.id === transactionId);
+      
+      // Reverse the transaction's effect on the account balance if it has an account
+      if (transactionToDelete && transactionToDelete.account_name) {
+        await updateAccountBalance(
+          transactionToDelete.account_name,
+          transactionToDelete.amount,
+          transactionToDelete.transaction_type === 'debit' ? 'credit' : 'debit'
+        );
+      }
+
+      const success = await deleteStoredTransaction(transactionId);
       
       if (success) {
         toast({
           title: "Success",
-          description: "Transaction deleted successfully",
+          description: "Transaction deleted successfully and account balance updated",
         });
         fetchTransactions();
+        fetchAccounts(); // Refresh accounts to show updated balances
         refreshData();
       } else {
         throw new Error('Failed to delete transaction');
@@ -273,15 +383,15 @@ const Transactions = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  const totalIncome = filteredTransactions
-    .filter(t => t.transaction_type === 'income')
+  const totalCredit = filteredTransactions
+    .filter(t => t.transaction_type === 'credit')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalExpenses = filteredTransactions
-    .filter(t => t.transaction_type === 'expense')
+  const totalDebit = filteredTransactions
+    .filter(t => t.transaction_type === 'debit')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const paymentMethods = ['cash', 'card', 'upi', 'bank_transfer'];
+  const paymentMethods = ['cash', 'debit_card', 'credit_card', 'upi', 'bank_transfer', 'loan_payment'];
 
   if (loading) {
     return (
@@ -330,21 +440,21 @@ const Transactions = () => {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-green-600">Total Income</CardTitle>
+            <CardTitle className="text-sm font-medium text-green-600">Total Credit</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              ₹{totalIncome.toLocaleString()}
+              ₹{totalCredit.toLocaleString()}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-red-600">Total Expenses</CardTitle>
+            <CardTitle className="text-sm font-medium text-red-600">Total Debit</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              ₹{totalExpenses.toLocaleString()}
+              ₹{totalDebit.toLocaleString()}
             </div>
           </CardContent>
         </Card>
@@ -411,8 +521,8 @@ const Transactions = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">All types</SelectItem>
-                      <SelectItem value="income">Income</SelectItem>
-                      <SelectItem value="expense">Expense</SelectItem>
+                      <SelectItem value="credit">Credit</SelectItem>
+                      <SelectItem value="debit">Debit</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -445,7 +555,11 @@ const Transactions = () => {
                       <SelectItem value="">All methods</SelectItem>
                       {paymentMethods.map((method) => (
                         <SelectItem key={method} value={method}>
-                          {method.replace('_', ' ').toUpperCase()}
+                          {method === 'debit_card' ? 'Debit Card' : 
+                           method === 'credit_card' ? 'Credit Card' :
+                           method === 'bank_transfer' ? 'Bank Transfer' :
+                           method === 'loan_payment' ? 'Loan Payment' :
+                           method.charAt(0).toUpperCase() + method.slice(1)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -477,8 +591,8 @@ const Transactions = () => {
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
                         <span className="font-medium">{transaction.description}</span>
-                        <Badge variant={transaction.transaction_type === 'income' ? 'default' : 'secondary'}>
-                          {transaction.transaction_type === 'income' ? (
+                        <Badge variant={transaction.transaction_type === 'credit' ? 'default' : 'secondary'}>
+                          {transaction.transaction_type === 'credit' ? (
                             <TrendingUp className="h-3 w-3 mr-1" />
                           ) : (
                             <TrendingDown className="h-3 w-3 mr-1" />
@@ -491,7 +605,11 @@ const Transactions = () => {
                         <span>•</span>
                         <span>{format(new Date(transaction.transaction_date), 'MMM dd, yyyy')}</span>
                         <span>•</span>
-                        <span>{transaction.payment_method?.replace('_', ' ').toUpperCase()}</span>
+                        <span>{transaction.payment_method === 'debit_card' ? 'Debit Card' : 
+                               transaction.payment_method === 'credit_card' ? 'Credit Card' :
+                               transaction.payment_method === 'bank_transfer' ? 'Bank Transfer' :
+                               transaction.payment_method === 'loan_payment' ? 'Loan Payment' :
+                               transaction.payment_method?.charAt(0).toUpperCase() + transaction.payment_method?.slice(1)}</span>
                         {transaction.account_name && (
                           <>
                             <span>•</span>
@@ -507,8 +625,8 @@ const Transactions = () => {
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <div className={`text-lg font-semibold ${transaction.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                      {transaction.transaction_type === 'income' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
+                    <div className={`text-lg font-semibold ${transaction.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
+                      {transaction.transaction_type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
                     </div>
                     <div className="flex space-x-1">
                       <Button 
@@ -578,13 +696,13 @@ const Transactions = () => {
 
             <div>
               <Label htmlFor="editType">Type</Label>
-              <Select value={editForm.transaction_type} onValueChange={(value) => setEditForm({ ...editForm, transaction_type: value as 'income' | 'expense' })}>
+              <Select value={editForm.transaction_type} onValueChange={(value) => setEditForm({ ...editForm, transaction_type: value as 'credit' | 'debit' })}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
+                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="debit">Debit</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -627,7 +745,11 @@ const Transactions = () => {
                 <SelectContent>
                   {paymentMethods.map((method) => (
                     <SelectItem key={method} value={method}>
-                      {method.replace('_', ' ').toUpperCase()}
+                      {method === 'debit_card' ? 'Debit Card' : 
+                       method === 'credit_card' ? 'Credit Card' :
+                       method === 'bank_transfer' ? 'Bank Transfer' :
+                       method === 'loan_payment' ? 'Loan Payment' :
+                       method.charAt(0).toUpperCase() + method.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -636,12 +758,30 @@ const Transactions = () => {
 
             <div>
               <Label htmlFor="editAccount">Account</Label>
-              <Input
-                id="editAccount"
-                value={editForm.account_name}
-                onChange={(e) => setEditForm({ ...editForm, account_name: e.target.value })}
-                placeholder="Account name"
-              />
+              <Select value={editForm.account_name} onValueChange={(value) => setEditForm({ ...editForm, account_name: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.length > 0 ? (
+                    accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.name}>
+                        <div className="flex items-center space-x-2">
+                          <div className="w-3 h-3 rounded-full bg-blue-500" />
+                          <span>{account.name}</span>
+                          <span className="text-xs text-gray-500">
+                            ({account.type} • ₹{account.balance.toLocaleString()})
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-accounts" disabled>
+                      No accounts available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

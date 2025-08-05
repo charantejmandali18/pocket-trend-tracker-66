@@ -15,6 +15,7 @@ import EnhancedAccountsNew from "@/pages/EnhancedAccountsNew";
 import Profile from "@/pages/Profile";
 import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
+import GmailCallback from "@/pages/GmailCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,8 @@ const App = () => (
                 <Route path="profile" element={<Profile />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
+              {/* OAuth callback routes - outside layout */}
+              <Route path="/auth/gmail/callback" element={<GmailCallback />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppProvider>

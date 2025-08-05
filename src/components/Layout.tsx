@@ -29,11 +29,12 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { useApp } from '@/contexts/AppContext';
+// Import from unified storage service
 import { 
   getStoredTransactions, 
   getPersonalTransactions, 
   getGroupTransactions 
-} from '@/utils/dataStorage';
+} from '@/utils/storageService';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -69,8 +70,8 @@ const Layout = () => {
   const [groupName, setGroupName] = useState('');
   const [groupCode, setGroupCode] = useState('');
   const [monthlyStats, setMonthlyStats] = useState({
-    income: 0,
-    expenses: 0,
+    credit: 0,
+    debit: 0,
     balance: 0
   });
 
@@ -87,33 +88,41 @@ const Layout = () => {
       const currentMonthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
       const currentMonthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
 
+      console.log('📊 Sidebar fetching monthly stats for:', currentMonthStart, 'to', currentMonthEnd);
+
       // Get transactions based on mode
       let transactions;
       if (isPersonalMode) {
-        transactions = getPersonalTransactions(user.id, user.email);
+        transactions = await getPersonalTransactions(user.id, user.email);
       } else if (currentGroup) {
-        transactions = getGroupTransactions(currentGroup.id);
+        transactions = await getGroupTransactions(currentGroup.id);
       } else {
         transactions = [];
       }
       
+      console.log('📈 Sidebar - Total transactions fetched:', transactions.length);
+      
       // Filter by current month
-      transactions = transactions.filter(t => 
+      const monthlyTransactions = transactions.filter(t => 
         t.transaction_date >= currentMonthStart && t.transaction_date <= currentMonthEnd
       );
 
-      const income = transactions
-        .filter(t => t.transaction_type === 'income')
+      console.log('📅 Sidebar - Monthly transactions filtered:', monthlyTransactions.length);
+
+      const credit = monthlyTransactions
+        .filter(t => t.transaction_type === 'credit')
         .reduce((sum, t) => sum + t.amount, 0);
       
-      const expenses = transactions
-        .filter(t => t.transaction_type === 'expense')
+      const debit = monthlyTransactions
+        .filter(t => t.transaction_type === 'debit')
         .reduce((sum, t) => sum + t.amount, 0);
 
+      console.log('💰 Sidebar stats:', { credit, debit, balance: credit - debit });
+
       setMonthlyStats({
-        income,
-        expenses,
-        balance: income - expenses
+        credit,
+        debit,
+        balance: credit - debit
       });
     } catch (error) {
       console.error('Error fetching monthly stats:', error);
@@ -388,12 +397,12 @@ const Layout = () => {
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Income</span>
-                    <span className="font-medium text-green-600">₹{monthlyStats.income.toLocaleString()}</span>
+                    <span className="text-gray-600 dark:text-gray-400">Credit</span>
+                    <span className="font-medium text-green-600">₹{monthlyStats.credit.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Expenses</span>
-                    <span className="font-medium text-red-600">₹{monthlyStats.expenses.toLocaleString()}</span>
+                    <span className="text-gray-600 dark:text-gray-400">Debit</span>
+                    <span className="font-medium text-red-600">₹{monthlyStats.debit.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600 dark:text-gray-400">Balance</span>

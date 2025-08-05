@@ -17,13 +17,19 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
+// Import from unified storage service instead of directly from dataStorage
 import { 
   getFinancialAccounts,
+  addFinancialAccount,
+  updateFinancialAccount,
+  deleteFinancialAccount,
+  type FinancialAccount
+} from '@/utils/storageService';
+
+// Import functions that are only available in dataStorage (not yet in storageService)
+import {
   getPersonalFinancialAccounts,
   getGroupFinancialAccounts,
-  updateFinancialAccount,
-  addFinancialAccount,
-  deleteFinancialAccount,
   processEMIPayment,
   processInvestmentUpdate,
   processRecurringPayment,
@@ -32,7 +38,6 @@ import {
   calculateHomeLoanDetails,
   generateDefaultConstructionStages,
   processStageCompletion,
-  type FinancialAccount,
   type LoanCalculationParams,
   type HomeLoanParams,
   type ConstructionStage
@@ -47,6 +52,28 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 const EnhancedAccountsNew = () => {
   const { user, isPersonalMode, currentGroup, userGroups, dataVersion, refreshData } = useApp();
   const { toast } = useToast();
+  
+  // Helper function to calculate next due date based on EMI start date
+  const calculateNextDueDate = (emiStartDate: string): string => {
+    // If no EMI start date provided, use today as default
+    const effectiveStartDate = emiStartDate || new Date().toISOString().split('T')[0];
+    
+    const startDate = new Date(effectiveStartDate);
+    const today = new Date();
+    
+    // If EMI start date is in the future, that's the next due date
+    if (startDate > today) {
+      return effectiveStartDate;
+    }
+    
+    // Otherwise, calculate the next due date from today
+    const nextDue = new Date(today);
+    nextDue.setMonth(nextDue.getMonth() + 1);
+    // Keep the same day of month as EMI start date
+    nextDue.setDate(startDate.getDate());
+    
+    return nextDue.toISOString().split('T')[0];
+  };
   
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -184,8 +211,9 @@ const EnhancedAccountsNew = () => {
         setNewAccount(prev => ({
           ...prev,
           monthly_emi: result.monthlyEmi,
-          remaining_terms: newAccount.loan_tenure_months,
-          balance: prev.balance === 0 ? newAccount.principal_amount : prev.balance
+          remaining_terms: newAccount.remaining_terms || newAccount.loan_tenure_months,
+          balance: prev.balance === 0 ? newAccount.principal_amount : prev.balance,
+          next_due_date: calculateNextDueDate(newAccount.emi_start_date)
         }));
       }
     }
@@ -235,12 +263,19 @@ const EnhancedAccountsNew = () => {
         
         const result = calculateHomeLoanDetails(homeLoanParams, editAccount.emi_start_date, constructionStages);
         
+        const nextDue = calculateNextDueDate(editAccount.emi_start_date);
+        console.log('Edit Account (Home Loan) - Calculating next due date:', {
+          emi_start_date: editAccount.emi_start_date,
+          calculated_next_due: nextDue
+        });
+        
         setEditAccount(prev => ({
           ...prev,
           monthly_emi: result.postMoratoriumEmi,
           remaining_terms: result.remainingTenureMonths, // Use calculated remaining tenure
           moratorium_end_date: result.moratoriumEndDate,
-          is_in_moratorium: new Date() < new Date(result.moratoriumEndDate)
+          is_in_moratorium: new Date() < new Date(result.moratoriumEndDate),
+          next_due_date: nextDue
         }));
       } else {
         // Regular loan
@@ -257,9 +292,16 @@ const EnhancedAccountsNew = () => {
         
         const result = calculateLoanDetails(params);
         
+        const nextDue = calculateNextDueDate(editAccount.emi_start_date);
+        console.log('Edit Account - Calculating next due date:', {
+          emi_start_date: editAccount.emi_start_date,
+          calculated_next_due: nextDue
+        });
+        
         setEditAccount(prev => ({
           ...prev,
-          monthly_emi: result.monthlyEmi
+          monthly_emi: result.monthlyEmi,
+          next_due_date: nextDue
         }));
       }
     }
@@ -294,27 +336,32 @@ const EnhancedAccountsNew = () => {
 
     try {
       setLoading(true);
+      console.log('🔄 Loading accounts for user:', user.id, 'Personal mode:', isPersonalMode);
       
-      // Get accounts based on mode
+      // Use unified storage service to get all accounts
+      const allAccounts = await getFinancialAccounts();
+      console.log('📊 All accounts from storage:', allAccounts.length, allAccounts);
+      
+      // Filter accounts based on mode
       let userAccounts: FinancialAccount[] = [];
       if (isPersonalMode) {
-        userAccounts = getPersonalFinancialAccounts(user.id);
-      } else if (currentGroup) {
-        // Get group accounts AND pool contributions from all users
-        const groupAccounts = getGroupFinancialAccounts(currentGroup.id);
-        const allAccounts = getFinancialAccounts();
-        
-        // Find all accounts marked as pool contributions
-        const poolContributions = allAccounts.filter(a => 
-          a.is_pool_contribution && 
-          a.is_active &&
-          !a.group_id // Personal accounts marked for pool contribution
+        // Personal mode: get accounts with no group_id (null or undefined)
+        userAccounts = allAccounts.filter(a => 
+          a.user_id === user.id && 
+          (a.group_id === null || a.group_id === undefined) &&
+          a.is_active
         );
-        
-        userAccounts = [...groupAccounts, ...poolContributions];
+        console.log('👤 Personal accounts filtered:', userAccounts.length);
+      } else if (currentGroup) {
+        // Group mode: get accounts for this specific group
+        userAccounts = allAccounts.filter(a => 
+          a.group_id === currentGroup.id &&
+          a.is_active
+        );
+        console.log('👥 Group accounts filtered:', userAccounts.length);
       }
       
-      console.log('Loaded accounts:', userAccounts.length);
+      console.log('✅ Final accounts to display:', userAccounts.length, userAccounts);
       setAccounts(userAccounts);
       
       // Calculate financial summary
@@ -453,7 +500,7 @@ const EnhancedAccountsNew = () => {
     }
   };
 
-  const handleAddAccount = () => {
+  const handleAddAccount = async () => {
     if (!user || !newAccount.name.trim()) {
       toast({
         title: "Error",
@@ -464,12 +511,13 @@ const EnhancedAccountsNew = () => {
     }
 
     try {
+      console.log('🔄 Starting account creation process');
       const accountData: Omit<FinancialAccount, 'id' | 'created_at'> = {
         user_id: user.id,
         group_id: isPersonalMode ? null : currentGroup?.id || null,
         name: newAccount.name.trim(),
         type: newAccount.type,
-        bank_name: newAccount.bank_name || undefined,
+        bank_name: newAccount.type === 'cash' ? undefined : (newAccount.bank_name || undefined),
         balance: newAccount.balance,
         credit_limit: newAccount.credit_limit || undefined,
         interest_rate: newAccount.interest_rate || undefined,
@@ -510,12 +558,18 @@ const EnhancedAccountsNew = () => {
           ) : undefined
       };
 
-      addFinancialAccount(accountData);
+      console.log('🚀 About to call addFinancialAccount with:', accountData);
+      const result = await addFinancialAccount(accountData);
+      console.log('🎯 addFinancialAccount result:', result);
 
-      toast({
-        title: "Success",
-        description: `${newAccount.name} added successfully!`,
-      });
+      if (result) {
+        toast({
+          title: "Success",
+          description: `${newAccount.name} added successfully!`,
+        });
+      } else {
+        throw new Error('Failed to create account - no result returned');
+      }
 
       // Reset form
       setNewAccount({
@@ -558,10 +612,13 @@ const EnhancedAccountsNew = () => {
       refreshData();
 
     } catch (error) {
-      console.error('Error adding account:', error);
+      console.error('❌ Error adding account:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add account';
+      console.error('❌ Error details:', errorMessage);
+      
       toast({
         title: "Error",
-        description: "Failed to add account",
+        description: `Failed to add account: ${errorMessage}`,
         variant: "destructive",
       });
     }
@@ -818,19 +875,26 @@ const EnhancedAccountsNew = () => {
                 </Select>
               </div>
               
-              <div>
-                <Label htmlFor="bankName">Bank/Institution</Label>
-                <Input
-                  id="bankName"
-                  value={newAccount.bank_name}
-                  onChange={(e) => setNewAccount({...newAccount, bank_name: e.target.value})}
-                  placeholder="e.g., HDFC Bank, SBI"
-                />
-              </div>
+              {/* Only show bank field for non-cash accounts */}
+              {newAccount.type !== 'cash' && (
+                <div>
+                  <Label htmlFor="bankName">Bank/Institution</Label>
+                  <Input
+                    id="bankName"
+                    value={newAccount.bank_name}
+                    onChange={(e) => setNewAccount({...newAccount, bank_name: e.target.value})}
+                    placeholder="e.g., HDFC Bank, SBI"
+                  />
+                </div>
+              )}
               
               <div>
                 <Label htmlFor="balance">
-                  {newAccount.type === 'loan' ? 'Outstanding Loan Balance *' : 'Current Balance *'}
+                  {newAccount.type === 'loan' 
+                    ? 'Outstanding Loan Balance *' 
+                    : newAccount.type === 'cash'
+                    ? 'Cash Amount *'
+                    : 'Current Balance *'}
                 </Label>
                 <Input
                   id="balance"
@@ -842,6 +906,11 @@ const EnhancedAccountsNew = () => {
                 {newAccount.type === 'loan' && (
                   <p className="text-xs text-gray-500 mt-1">
                     Enter the current outstanding amount (remaining to be paid)
+                  </p>
+                )}
+                {newAccount.type === 'cash' && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the amount of cash you currently have
                   </p>
                 )}
               </div>
@@ -925,6 +994,21 @@ const EnhancedAccountsNew = () => {
                       onChange={(e) => setNewAccount({...newAccount, loan_tenure_months: Number(e.target.value)})}
                       placeholder="0"
                     />
+                  </div>
+
+                  {/* Remaining Terms */}
+                  <div>
+                    <Label htmlFor="remainingTerms">Remaining Terms (months)</Label>
+                    <Input
+                      id="remainingTerms"
+                      type="number"
+                      value={newAccount.remaining_terms}
+                      onChange={(e) => setNewAccount({...newAccount, remaining_terms: Number(e.target.value)})}
+                      placeholder="Leave empty for new loan"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      For existing loans: How many EMI payments are left? For new loans: Leave empty (will auto-set to loan tenure)
+                    </p>
                   </div>
 
                   {/* Interest Rate and Type */}
@@ -1226,19 +1310,26 @@ const EnhancedAccountsNew = () => {
               </Select>
             </div>
             
-            <div>
-              <Label htmlFor="editBankName">Bank/Institution</Label>
-              <Input
-                id="editBankName"
-                value={editAccount.bank_name}
-                onChange={(e) => setEditAccount({...editAccount, bank_name: e.target.value})}
-                placeholder="e.g., HDFC Bank, SBI"
-              />
-            </div>
+            {/* Only show bank field for non-cash accounts */}
+            {editAccount.type !== 'cash' && (
+              <div>
+                <Label htmlFor="editBankName">Bank/Institution</Label>
+                <Input
+                  id="editBankName"
+                  value={editAccount.bank_name}
+                  onChange={(e) => setEditAccount({...editAccount, bank_name: e.target.value})}
+                  placeholder="e.g., HDFC Bank, SBI"
+                />
+              </div>
+            )}
             
             <div>
               <Label htmlFor="editBalance">
-                {editAccount.type === 'loan' ? 'Outstanding Loan Balance *' : 'Current Balance *'}
+                {editAccount.type === 'loan' 
+                  ? 'Outstanding Loan Balance *' 
+                  : editAccount.type === 'cash'
+                  ? 'Cash Amount *'
+                  : 'Current Balance *'}
               </Label>
               <Input
                 id="editBalance"
@@ -1250,6 +1341,11 @@ const EnhancedAccountsNew = () => {
               {editAccount.type === 'loan' && (
                 <p className="text-xs text-gray-500 mt-1">
                   Current outstanding amount (remaining to be paid)
+                </p>
+              )}
+              {editAccount.type === 'cash' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Current amount of cash you have
                 </p>
               )}
             </div>

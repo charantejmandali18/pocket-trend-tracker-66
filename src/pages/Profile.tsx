@@ -24,7 +24,13 @@ import {
   UserPlus,
   Database,
   Download,
-  Trash2
+  Trash2,
+  Link,
+  Unlink,
+  Inbox,
+  RefreshCw,
+  AlertTriangle,
+  Plus
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -40,6 +46,7 @@ import {
   type StoredGroup,
   type GroupMembership
 } from '@/utils/dataStorage';
+import { useGmailOAuth } from '@/hooks/useGmailOAuth';
 
 const Profile = () => {
   const { user, userGroups, isPersonalMode, currentGroup } = useApp();
@@ -54,6 +61,18 @@ const Profile = () => {
     groupsOwned: 0,
     groupsJoined: 0
   });
+
+  // Gmail OAuth integration
+  const {
+    connectedEmails,
+    unprocessedAccounts,
+    isLoading,
+    isProcessingEmails,
+    connectGmail,
+    disconnectEmail,
+    syncEmails,
+    processAccount
+  } = useGmailOAuth();
 
   useEffect(() => {
     if (user) {
@@ -145,6 +164,18 @@ const Profile = () => {
       });
       // Reload page to reset state
       window.location.reload();
+    }
+  };
+
+  // Email authentication functions
+  const connectEmail = (provider: 'gmail' | 'outlook' | 'yahoo') => {
+    if (provider === 'gmail') {
+      connectGmail();
+    } else {
+      toast({
+        title: "Coming Soon",
+        description: `${provider} integration will be available soon`,
+      });
     }
   };
 
@@ -274,12 +305,262 @@ const Profile = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="groups" className="space-y-4">
+      <Tabs defaultValue="email-auth" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="email-auth">Email Integration</TabsTrigger>
+          <TabsTrigger value="unprocessed">Unprocessed Accounts</TabsTrigger>
           <TabsTrigger value="groups">My Groups</TabsTrigger>
           <TabsTrigger value="mappings">Email Mappings</TabsTrigger>
           <TabsTrigger value="data">Data Management</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="email-auth" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Connected Email Accounts */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Inbox className="h-5 w-5 mr-2" />
+                  Connected Email Accounts ({connectedEmails.length})
+                </CardTitle>
+                <p className="text-sm text-gray-500">
+                  Manage your connected email accounts for automatic transaction processing
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {connectedEmails.length > 0 ? (
+                  connectedEmails.map((email) => (
+                    <div key={email.id} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            email.provider === 'gmail' ? 'bg-red-100 text-red-600' :
+                            email.provider === 'outlook' ? 'bg-blue-100 text-blue-600' :
+                            'bg-purple-100 text-purple-600'
+                          }`}>
+                            <Mail className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{email.email}</div>
+                            <div className="text-sm text-gray-500 capitalize">
+                              {email.provider} • Connected {format(new Date(email.connected_at), 'MMM dd')}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Badge variant={email.status === 'connected' ? 'default' : 'secondary'}>
+                            {email.status}
+                          </Badge>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => disconnectEmail(email.id)}
+                          >
+                            <Unlink className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <div className="text-gray-500">Last Sync</div>
+                          <div className="font-medium">
+                            {format(new Date(email.last_sync), 'MMM dd, HH:mm')}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Transactions</div>
+                          <div className="font-medium">{email.transactions_processed}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Accounts Found</div>
+                          <div className="font-medium">{email.accounts_discovered}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center text-gray-500 py-8">
+                    <Mail className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p className="text-lg font-medium">No email accounts connected</p>
+                    <p className="text-sm">Connect your email to start automatic transaction processing</p>
+                  </div>
+                )}
+
+                <div className="flex space-x-2 pt-4 border-t">
+                  <Button 
+                    onClick={syncEmails} 
+                    disabled={isProcessingEmails || connectedEmails.length === 0}
+                    className="flex-1"
+                  >
+                    {isProcessingEmails ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Sync Emails
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Add New Email Connection */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Plus className="h-5 w-5 mr-2" />
+                  Connect New Email Account
+                </CardTitle>
+                <p className="text-sm text-gray-500">
+                  Add email accounts to automatically process transaction notifications
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    We only read transaction-related emails and never access personal messages. All data is encrypted and stored securely.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-3">
+                  <Button 
+                    onClick={() => connectEmail('gmail')} 
+                    variant="outline" 
+                    className="w-full h-16 flex items-center justify-center space-x-3"
+                  >
+                    <div className="w-8 h-8 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-medium">Connect Gmail</div>
+                      <div className="text-sm text-gray-500">Most popular email service</div>
+                    </div>
+                  </Button>
+
+                  <Button 
+                    onClick={() => connectEmail('outlook')} 
+                    variant="outline" 
+                    className="w-full h-16 flex items-center justify-center space-x-3"
+                  >
+                    <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-medium">Connect Outlook</div>
+                      <div className="text-sm text-gray-500">Microsoft email service</div>
+                    </div>
+                  </Button>
+
+                  <Button 
+                    onClick={() => connectEmail('yahoo')} 
+                    variant="outline" 
+                    className="w-full h-16 flex items-center justify-center space-x-3"
+                  >
+                    <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-medium">Connect Yahoo Mail</div>
+                      <div className="text-sm text-gray-500">Yahoo email service</div>
+                    </div>
+                  </Button>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <h4 className="font-medium mb-2">What we can process:</h4>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li>• Bank transaction notifications</li>
+                    <li>• Credit card statements and alerts</li>
+                    <li>• UPI payment confirmations</li>
+                    <li>• EMI and loan payment receipts</li>
+                    <li>• Investment transaction confirmations</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="unprocessed" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <AlertTriangle className="h-5 w-5 mr-2" />
+                Unprocessed Accounts ({unprocessedAccounts.length})
+              </CardTitle>
+              <p className="text-sm text-gray-500">
+                These accounts were discovered from your emails but need manual review before adding
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {unprocessedAccounts.length > 0 ? (
+                  unprocessedAccounts.map((account) => (
+                    <div key={account.id} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <div className="font-medium">{account.discovered_account_name}</div>
+                          <div className="text-sm text-gray-500">
+                            Discovered from {(account as any).email_integrations?.email || 'Unknown'} • {format(new Date(account.discovery_date), 'MMM dd, yyyy')}
+                          </div>
+                        </div>
+                        <Badge variant="outline">
+                          {Math.round(account.confidence_score * 100)}% confidence
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+                        <div>
+                          <div className="text-gray-500">Bank</div>
+                          <div className="font-medium">{account.bank_name}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Type</div>
+                          <div className="font-medium capitalize">{account.account_type}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Balance</div>
+                          <div className="font-medium">₹{account.balance.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Status</div>
+                          <div className="font-medium text-yellow-600">Needs Review</div>
+                        </div>
+                      </div>
+
+                      <div className="flex space-x-2">
+                        <Button 
+                          size="sm" 
+                          onClick={() => processAccount(account.id, 'approve')}
+                          className="flex-1"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Add Account
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => processAccount(account.id, 'reject')}
+                          className="flex-1"
+                        >
+                          <AlertCircle className="h-4 w-4 mr-2" />
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center text-gray-500 py-8">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-300" />
+                    <p className="text-lg font-medium">All caught up!</p>
+                    <p className="text-sm">No unprocessed accounts found</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="groups" className="space-y-4">
           <Card>

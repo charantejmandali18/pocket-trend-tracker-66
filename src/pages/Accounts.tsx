@@ -36,13 +36,13 @@ import { format } from 'date-fns';
 import { getStoredTransactions } from '@/utils/storageService';
 import { supabase } from '@/integrations/supabase/client';
 
-// Account type definition based on Supabase accounts table
+// Account type definition based on Supabase accounts table constraint
 interface Account {
   id: string;
   user_id: string;
   group_id?: string;
   name: string;
-  account_type: 'savings' | 'checking' | 'credit_card' | 'loan' | 'investment' | 'cash' | 'real_estate' | 'vehicle' | 'other';
+  account_type: 'bank' | 'credit_card' | 'wallet' | 'investment' | 'other'; // Database constraint values
   bank_name?: string;
   account_number_masked?: string;
   balance: number;
@@ -50,6 +50,14 @@ interface Account {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// UI Account type for form display
+interface UIAccountType {
+  ui_value: string;
+  db_value: Account['account_type'];
+  label: string;
+  category: string;
 }
 
 const Accounts = () => {
@@ -63,7 +71,8 @@ const Accounts = () => {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [newAccount, setNewAccount] = useState({
     name: '',
-    account_type: 'savings' as Account['account_type'],
+    account_type: 'bank' as Account['account_type'], // Use database-allowed type
+    ui_type: 'savings', // UI display type
     bank_name: '',
     account_number_masked: '',
     balance: 0,
@@ -129,13 +138,17 @@ const Accounts = () => {
     try {
       console.log('Adding account:', newAccount);
       
+      // Map UI type to database type
+      const dbAccountType = getDbTypeFromUiType(newAccount.ui_type);
+      console.log('Account type mapping:', { uiType: newAccount.ui_type, dbType: dbAccountType });
+      
       const { data, error } = await supabase
         .from('accounts')
         .insert({
           user_id: user.id,
           group_id: isPersonalMode ? null : currentGroup?.id,
           name: newAccount.name.trim(),
-          account_type: newAccount.account_type,
+          account_type: dbAccountType,
           bank_name: newAccount.bank_name.trim() || null,
           account_number_masked: newAccount.account_number_masked.trim() || null,
           balance: newAccount.balance || 0,
@@ -154,7 +167,8 @@ const Accounts = () => {
 
       setNewAccount({
         name: '',
-        account_type: 'savings',
+        account_type: 'bank',
+        ui_type: 'savings',
         bank_name: '',
         account_number_masked: '',
         balance: 0,
@@ -318,7 +332,9 @@ const Accounts = () => {
   };
 
   const getAccountTypeIcon = (type: Account['account_type']) => {
-    switch (type) {
+    // Map database type to UI type for icon selection
+    const uiType = getUiTypeFromDbType(type);
+    switch (uiType) {
       case 'savings':
       case 'checking':
         return Building;
@@ -340,7 +356,9 @@ const Accounts = () => {
   };
 
   const getAccountTypeColor = (type: Account['account_type']) => {
-    switch (type) {
+    // Map database type to UI type for color selection
+    const uiType = getUiTypeFromDbType(type);
+    switch (uiType) {
       case 'savings': return 'text-green-600';
       case 'checking': return 'text-blue-600';
       case 'credit_card': return 'text-red-600';
@@ -353,17 +371,30 @@ const Accounts = () => {
     }
   };
 
-  const accountTypes = [
-    { value: 'savings', label: 'Savings Account', category: 'bank' },
-    { value: 'checking', label: 'Checking Account', category: 'bank' },
-    { value: 'credit_card', label: 'Credit Card', category: 'liability' },
-    { value: 'loan', label: 'Loan', category: 'liability' },
-    { value: 'investment', label: 'Investment Account', category: 'investment' },
-    { value: 'cash', label: 'Cash', category: 'asset' },
-    { value: 'real_estate', label: 'Real Estate', category: 'asset' },
-    { value: 'vehicle', label: 'Vehicle', category: 'asset' },
-    { value: 'other', label: 'Other', category: 'other' }
+  // Map UI account types to database-allowed types
+  const accountTypes: UIAccountType[] = [
+    { ui_value: 'savings', db_value: 'bank', label: 'Savings Account', category: 'bank' },
+    { ui_value: 'checking', db_value: 'bank', label: 'Checking Account', category: 'bank' },
+    { ui_value: 'credit_card', db_value: 'credit_card', label: 'Credit Card', category: 'liability' },
+    { ui_value: 'loan', db_value: 'other', label: 'Loan', category: 'liability' },
+    { ui_value: 'investment', db_value: 'investment', label: 'Investment Account', category: 'investment' },
+    { ui_value: 'cash', db_value: 'wallet', label: 'Cash/Wallet', category: 'asset' },
+    { ui_value: 'real_estate', db_value: 'other', label: 'Real Estate', category: 'asset' },
+    { ui_value: 'vehicle', db_value: 'other', label: 'Vehicle', category: 'asset' },
+    { ui_value: 'other', db_value: 'other', label: 'Other', category: 'other' }
   ];
+
+  // Helper function to get database type from UI type
+  const getDbTypeFromUiType = (uiType: string): Account['account_type'] => {
+    const accountType = accountTypes.find(t => t.ui_value === uiType);
+    return accountType?.db_value || 'other';
+  };
+
+  // Helper function to get UI type from database type (for display)
+  const getUiTypeFromDbType = (dbType: Account['account_type']): string => {
+    const accountType = accountTypes.find(t => t.db_value === dbType);
+    return accountType?.ui_value || 'other';
+  };
 
   if (loading) {
     return (
@@ -416,13 +447,13 @@ const Accounts = () => {
               </div>
               <div>
                 <Label htmlFor="type">Account Type</Label>
-                <Select value={newAccount.account_type} onValueChange={(value) => setNewAccount({ ...newAccount, account_type: value as Account['account_type'] })}>
+                <Select value={newAccount.ui_type} onValueChange={(value) => setNewAccount({ ...newAccount, ui_type: value, account_type: getDbTypeFromUiType(value) })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {accountTypes.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
+                      <SelectItem key={type.ui_value} value={type.ui_value}>
                         {type.label}
                       </SelectItem>
                     ))}
@@ -555,7 +586,7 @@ const Accounts = () => {
                             <div className="flex items-center space-x-2">
                               <span className="font-medium text-lg">{account.name}</span>
                               <Badge variant="outline">
-                                {accountTypes.find(t => t.value === account.account_type)?.label}
+                                {accountTypes.find(t => t.db_value === account.account_type)?.label}
                               </Badge>
                             </div>
                             <div className="text-sm text-gray-500 space-x-4">
@@ -644,14 +675,14 @@ const Accounts = () => {
               <CardContent>
                 <div className="space-y-3">
                   {accountTypes.map((type) => {
-                    const typeAccounts = accounts.filter(a => a.account_type === type.value);
+                    const typeAccounts = accounts.filter(a => a.account_type === type.db_value);
                     const typeBalance = typeAccounts.reduce((sum, a) => sum + a.balance, 0);
                     const percentage = totalAssets > 0 ? (typeBalance / totalAssets) * 100 : 0;
                     
                     if (typeAccounts.length === 0) return null;
                     
                     return (
-                      <div key={type.value} className="space-y-2">
+                      <div key={type.ui_value} className="space-y-2">
                         <div className="flex justify-between text-sm">
                           <span>{type.label} ({typeAccounts.length})</span>
                           <span className="font-medium">₹{typeBalance.toLocaleString()}</span>
@@ -774,7 +805,7 @@ const Accounts = () => {
                     </Alert>
                   )}
                   
-                  {accounts.filter(a => a.account_type === 'savings').length === 0 && (
+                  {accounts.filter(a => getUiTypeFromDbType(a.account_type) === 'savings').length === 0 && (
                     <Alert>
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>

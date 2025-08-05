@@ -27,18 +27,20 @@ import {
   getGroupTransactions as getSupabaseGroupTransactions 
 } from '@/utils/supabaseDataStorage';
 
+// Import from unified storage service for account data
+import { getFinancialAccounts } from '@/utils/storageService';
+
 import {
   getStoredTransactions as getLocalTransactions,
   getPersonalTransactions as getLocalPersonalTransactions,
   getGroupTransactions as getLocalGroupTransactions,
-  getFinancialAccounts,
   getPersonalFinancialAccounts,
   getGroupFinancialAccounts
 } from '@/utils/dataStorage';
 
 interface DashboardData {
-  totalIncome: number;
-  totalExpenses: number;
+  totalCredit: number;
+  totalDebit: number;
   categories: CategorySummary[];
   memberSpending?: { [email: string]: number }; // For group mode
   
@@ -81,8 +83,8 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user, isPersonalMode, currentGroup, categories, dataVersion } = useApp();
   const [dashboardData, setDashboardData] = useState<DashboardData>({
-    totalIncome: 0,
-    totalExpenses: 0,
+    totalCredit: 0,
+    totalDebit: 0,
     categories: [],
     accountBalances: {
       totalAssets: 0,
@@ -130,23 +132,27 @@ const Dashboard = () => {
         transactions = [];
       }
       
-      // Get financial accounts
+      // Get financial accounts using unified storage service
+      console.log('🔄 Dashboard loading accounts for user:', user.id, 'Personal mode:', isPersonalMode);
+      const allAccounts = await getFinancialAccounts();
+      console.log('📊 Dashboard - All accounts from storage:', allAccounts.length, allAccounts);
+      
       let accounts;
       if (isPersonalMode) {
-        accounts = getPersonalFinancialAccounts(user.id);
-      } else if (currentGroup) {
-        // Get group accounts AND pool contributions from all users
-        const groupAccounts = getGroupFinancialAccounts(currentGroup.id);
-        const allAccounts = getFinancialAccounts();
-        
-        // Find all accounts marked as pool contributions
-        const poolContributions = allAccounts.filter(a => 
-          a.is_pool_contribution && 
-          a.is_active &&
-          !a.group_id // Personal accounts marked for pool contribution
+        // Personal mode: get accounts with no group_id
+        accounts = allAccounts.filter(a => 
+          a.user_id === user.id && 
+          (a.group_id === null || a.group_id === undefined) &&
+          a.is_active
         );
-        
-        accounts = [...groupAccounts, ...poolContributions];
+        console.log('👤 Dashboard - Personal accounts filtered:', accounts.length);
+      } else if (currentGroup) {
+        // Group mode: get accounts for this specific group
+        accounts = allAccounts.filter(a => 
+          a.group_id === currentGroup.id &&
+          a.is_active
+        );
+        console.log('👥 Dashboard - Group accounts filtered:', accounts.length);
       } else {
         accounts = [];
       }
@@ -175,12 +181,12 @@ const Dashboard = () => {
       );
 
       // Calculate monthly totals
-      const totalIncome = monthlyTransactions
-        .filter(t => t.transaction_type === 'income')
+      const totalCredit = monthlyTransactions
+        .filter(t => t.transaction_type === 'credit')
         .reduce((sum, t) => sum + t.amount, 0);
 
-      const totalExpenses = monthlyTransactions
-        .filter(t => t.transaction_type === 'expense')
+      const totalDebit = monthlyTransactions
+        .filter(t => t.transaction_type === 'debit')
         .reduce((sum, t) => sum + t.amount, 0);
 
       // Group by categories
@@ -188,7 +194,7 @@ const Dashboard = () => {
       
       monthlyTransactions.forEach(transaction => {
         const category = transaction.categories;
-        if (category && transaction.transaction_type === 'expense') {
+        if (category && transaction.transaction_type === 'debit') {
           const existing = categoryMap.get(category.id);
           if (existing) {
             existing.amount += transaction.amount;
@@ -215,13 +221,13 @@ const Dashboard = () => {
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       const daysRemaining = daysInMonth - currentDay;
       
-      const avgDailySpending = currentDay > 0 ? totalExpenses / currentDay : 0;
+      const avgDailySpending = currentDay > 0 ? totalDebit / currentDay : 0;
       const projectedMonthlySpending = avgDailySpending * daysInMonth;
-      const projectedMonthEndBalance = netWorth + totalIncome - projectedMonthlySpending;
+      const projectedMonthEndBalance = netWorth + totalCredit - projectedMonthlySpending;
       
       // Determine budget status
-      const spendingRate = currentDay > 0 ? totalExpenses / currentDay : 0;
-      const monthlyBudget = totalIncome * 0.8; // Assume 80% of income as budget
+      const spendingRate = currentDay > 0 ? totalDebit / currentDay : 0;
+      const monthlyBudget = totalCredit * 0.8; // Assume 80% of credit as budget
       const projectedMonthlyTotal = spendingRate * daysInMonth;
       
       let budgetStatus: 'under' | 'on_track' | 'over' | 'danger' = 'on_track';
@@ -230,10 +236,10 @@ const Dashboard = () => {
       else if (projectedMonthlyTotal > monthlyBudget) budgetStatus = 'over';
 
       const monthlyOverview = {
-        startingBalance: netWorth - totalIncome + totalExpenses, // Approximate starting balance
+        startingBalance: netWorth - totalCredit + totalDebit, // Approximate starting balance
         currentBalance: netWorth,
-        totalSpent: totalExpenses,
-        totalEarned: totalIncome,
+        totalSpent: totalDebit,
+        totalEarned: totalCredit,
         daysInMonth,
         daysRemaining,
         avgDailySpending,
@@ -245,15 +251,15 @@ const Dashboard = () => {
       let memberSpending = {};
       if (!isPersonalMode && currentGroup) {
         memberSpending = {
-          [user.id]: totalExpenses * 0.6, // Mock: current user contributed 60%
-          'other-member-1': totalExpenses * 0.25, // Mock: other member 25%
-          'other-member-2': totalExpenses * 0.15, // Mock: another member 15%
+          [user.id]: totalDebit * 0.6, // Mock: current user contributed 60%
+          'other-member-1': totalDebit * 0.25, // Mock: other member 25%
+          'other-member-2': totalDebit * 0.15, // Mock: another member 15%
         };
       }
 
       setDashboardData({
-        totalIncome,
-        totalExpenses,
+        totalCredit,
+        totalDebit,
         categories: categorySummaries,
         memberSpending: !isPersonalMode ? memberSpending : undefined,
         accountBalances: {
@@ -274,9 +280,9 @@ const Dashboard = () => {
 
   const currentMonth = format(new Date(), 'MMMM yyyy');
   const { accountBalances, monthlyOverview } = dashboardData;
-  const remainingBudget = dashboardData.totalIncome - dashboardData.totalExpenses;
-  const savingsRate = dashboardData.totalIncome > 0 
-    ? ((dashboardData.totalIncome - dashboardData.totalExpenses) / dashboardData.totalIncome) * 100 
+  const remainingBudget = dashboardData.totalCredit - dashboardData.totalDebit;
+  const savingsRate = dashboardData.totalCredit > 0 
+    ? ((dashboardData.totalCredit - dashboardData.totalDebit) / dashboardData.totalCredit) * 100 
     : 0;
 
   const handleCategoryClick = (categoryId: string) => {
@@ -346,7 +352,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              ₹{dashboardData.totalExpenses.toLocaleString()}
+              ₹{dashboardData.totalDebit.toLocaleString()}
             </div>
             <div className="text-xs text-gray-500">
               {currentMonth}
@@ -361,7 +367,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              ₹{dashboardData.totalIncome.toLocaleString()}
+              ₹{dashboardData.totalCredit.toLocaleString()}
             </div>
             <div className="text-xs text-gray-500">
               {currentMonth}
@@ -399,11 +405,11 @@ const Dashboard = () => {
                     </div>
                     <div className="flex items-center space-x-2">
                       <Progress 
-                        value={dashboardData.totalExpenses > 0 ? (category.amount / dashboardData.totalExpenses) * 100 : 0} 
+                        value={dashboardData.totalDebit > 0 ? (category.amount / dashboardData.totalDebit) * 100 : 0} 
                         className="flex-1"
                       />
                       <span className="text-xs text-gray-500 w-12">
-                        {dashboardData.totalExpenses > 0 ? ((category.amount / dashboardData.totalExpenses) * 100).toFixed(0) : 0}%
+                        {dashboardData.totalDebit > 0 ? ((category.amount / dashboardData.totalDebit) * 100).toFixed(0) : 0}%
                       </span>
                     </div>
                   </div>
@@ -429,7 +435,7 @@ const Dashboard = () => {
             {!isPersonalMode && currentGroup && dashboardData.memberSpending ? (
               <div className="space-y-4">
                 <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Group Asset: ₹{dashboardData.totalExpenses.toLocaleString()} total spent
+                  Group Asset: ₹{dashboardData.totalDebit.toLocaleString()} total spent
                 </div>
                 {Object.entries(dashboardData.memberSpending).map(([userId, amount]) => (
                   <div key={userId} className="flex items-center justify-between">
@@ -452,8 +458,8 @@ const Dashboard = () => {
                   <div className="flex justify-between text-xs text-gray-500">
                     <span>Your contribution:</span>
                     <span>
-                      {dashboardData.totalExpenses > 0 
-                        ? ((((dashboardData.memberSpending[user.id] as number) || 0) / dashboardData.totalExpenses) * 100).toFixed(1)
+                      {dashboardData.totalDebit > 0 
+                        ? ((((dashboardData.memberSpending[user.id] as number) || 0) / dashboardData.totalDebit) * 100).toFixed(1)
                         : 0}%
                     </span>
                   </div>
@@ -560,10 +566,10 @@ const Dashboard = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span>Current Spending ({format(new Date(), 'MMM dd')})</span>
-                    <span className="font-medium">₹{dashboardData.totalExpenses.toLocaleString()}</span>
+                    <span className="font-medium">₹{dashboardData.totalDebit.toLocaleString()}</span>
                   </div>
                   <Progress 
-                    value={(dashboardData.totalExpenses / dashboardData.projections.projectedSpending) * 100} 
+                    value={(dashboardData.totalDebit / dashboardData.projections.projectedSpending) * 100} 
                     className="h-2" 
                   />
                   <div className="flex justify-between text-sm">
@@ -599,7 +605,7 @@ const Dashboard = () => {
                   )}
                   
                   <div className="text-xs text-gray-500 mt-2">
-                    Daily recommended spending: ₹{((dashboardData.totalIncome * 0.8) / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).toLocaleString()}
+                    Daily recommended spending: ₹{((dashboardData.totalCredit * 0.8) / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).toLocaleString()}
                   </div>
                   
                   {dashboardData.projections.monthEndBalance < 0 && (

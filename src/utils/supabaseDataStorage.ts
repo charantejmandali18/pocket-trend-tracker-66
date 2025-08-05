@@ -16,6 +16,23 @@ export type StoredCategory = Database['public']['Tables']['categories']['Row'];
 export type StoredGroup = Database['public']['Tables']['expense_groups']['Row'];
 export type GroupMembership = Database['public']['Tables']['group_members']['Row'];
 
+// Helper functions to map between UI terminology and database terminology
+const mapTransactionTypeToDb = (uiType: string): string => {
+  switch (uiType) {
+    case 'credit': return 'income';
+    case 'debit': return 'expense';
+    default: return uiType; // fallback
+  }
+};
+
+const mapTransactionTypeFromDb = (dbType: string): string => {
+  switch (dbType) {
+    case 'income': return 'credit';
+    case 'expense': return 'debit';
+    default: return dbType; // fallback
+  }
+};
+
 // Enhanced Financial Module Interfaces for Supabase
 export interface CreditCard {
   id: string;
@@ -165,7 +182,14 @@ export const getStoredTransactions = async (): Promise<StoredTransaction[]> => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    
+    // Map transaction types back to UI terminology
+    const mappedData = (data || []).map(transaction => ({
+      ...transaction,
+      transaction_type: mapTransactionTypeFromDb(transaction.transaction_type)
+    }));
+    
+    return mappedData;
   } catch (error) {
     console.error('Error fetching transactions:', error);
     return [];
@@ -180,7 +204,7 @@ export const addStoredTransaction = async (transaction: Omit<StoredTransaction, 
         user_id: transaction.user_id,
         group_id: transaction.group_id,
         created_by: transaction.created_by,
-        transaction_type: transaction.transaction_type,
+        transaction_type: mapTransactionTypeToDb(transaction.transaction_type),
         amount: transaction.amount,
         description: transaction.description,
         category_id: transaction.category_id,
@@ -194,6 +218,12 @@ export const addStoredTransaction = async (transaction: Omit<StoredTransaction, 
       .single();
 
     if (error) throw error;
+    
+    // Map transaction type back to UI terminology
+    if (data) {
+      data.transaction_type = mapTransactionTypeFromDb(data.transaction_type);
+    }
+    
     return data;
   } catch (error) {
     console.error('Error adding transaction:', error);
@@ -203,9 +233,15 @@ export const addStoredTransaction = async (transaction: Omit<StoredTransaction, 
 
 export const updateStoredTransaction = async (transactionId: string, updates: Partial<StoredTransaction>): Promise<boolean> => {
   try {
+    // Map transaction type to database terminology if it exists in updates
+    const mappedUpdates = { ...updates };
+    if (mappedUpdates.transaction_type) {
+      mappedUpdates.transaction_type = mapTransactionTypeToDb(mappedUpdates.transaction_type);
+    }
+    
     const { error } = await supabase
       .from('transactions')
-      .update(updates)
+      .update(mappedUpdates)
       .eq('id', transactionId);
 
     if (error) throw error;
@@ -692,7 +728,14 @@ export const getPersonalTransactions = async (currentUserId: string, currentUser
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    
+    // Map transaction types back to UI terminology
+    const mappedData = (data || []).map(transaction => ({
+      ...transaction,
+      transaction_type: mapTransactionTypeFromDb(transaction.transaction_type)
+    }));
+    
+    return mappedData;
   } catch (error) {
     console.error('Error fetching personal transactions:', error);
     return [];
@@ -717,10 +760,257 @@ export const getGroupTransactions = async (groupId: string): Promise<StoredTrans
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    
+    // Map transaction types back to UI terminology
+    const mappedData = (data || []).map(transaction => ({
+      ...transaction,
+      transaction_type: mapTransactionTypeFromDb(transaction.transaction_type)
+    }));
+    
+    return mappedData;
   } catch (error) {
     console.error('Error fetching group transactions:', error);
     return [];
+  }
+};
+
+// Map UI account types to database-allowed types
+const mapAccountTypeToDatabase = (uiType: string): string => {
+  const mapping: { [key: string]: string } = {
+    'savings': 'bank',
+    'checking': 'bank', 
+    'credit_card': 'credit_card',
+    'loan': 'loan', // Keep loan as loan for proper filtering
+    'investment': 'investment',
+    'cash': 'wallet',
+    'wallet': 'wallet',
+    'real_estate': 'other',
+    'vehicle': 'other',
+    'other': 'other',
+    'recurring': 'other',
+    'mutual_fund': 'investment',
+    'stocks': 'investment',
+    'sip': 'investment',
+    'insurance': 'other',
+    'life_insurance': 'other',
+    'health_insurance': 'other'
+  };
+  
+  return mapping[uiType] || 'other';
+};
+
+// Map database account type back to UI type for compatibility
+const mapDbTypeToUiType = (dbType: string): string => {
+  const mapping: { [key: string]: string } = {
+    'bank': 'savings', // Default bank accounts to savings for UI
+    'credit_card': 'credit_card',
+    'loan': 'loan', // Map loan back to loan for UI
+    'wallet': 'cash',
+    'investment': 'investment',
+    'other': 'other'
+  };
+  
+  return mapping[dbType] || 'other';
+};
+
+// Financial Account Management
+export const getFinancialAccounts = async () => {
+  try {
+    console.log('getFinancialAccounts called');
+    
+    const user = await getCurrentUser();
+    if (!user) {
+      console.log('No user logged in');
+      return [];
+    }
+
+    console.log('Fetching accounts for user:', user.id);
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase error fetching accounts:', error);
+      throw error;
+    }
+    
+    // Map Supabase data to FinancialAccount interface format
+    const mappedAccounts = (data || []).map(account => ({
+      id: account.id,
+      user_id: account.user_id,
+      group_id: account.group_id,
+      name: account.name,
+      type: mapDbTypeToUiType(account.account_type), // Map account_type to type
+      bank_name: account.bank_name,
+      account_number: account.account_number_masked,
+      balance: account.balance || 0,
+      currency: account.currency,
+      is_active: account.is_active,
+      created_at: account.created_at,
+      updated_at: account.updated_at,
+      // Credit card specific fields
+      credit_limit: account.credit_limit,
+      // Loan specific fields
+      interest_rate: account.interest_rate,
+      monthly_emi: account.monthly_emi,
+      next_due_date: account.next_due_date,
+      remaining_terms: account.remaining_terms,
+      principal_amount: account.principal_amount,
+      loan_tenure_months: account.loan_tenure_months,
+      interest_type: account.interest_type,
+      processing_fee: account.processing_fee,
+      processing_fee_percentage: account.processing_fee_percentage,
+      is_no_cost_emi: account.is_no_cost_emi,
+      is_interest_free: account.is_interest_free,
+      emi_start_date: account.emi_start_date,
+      // Home loan specific fields
+      is_home_loan: account.is_home_loan,
+      is_under_construction: account.is_under_construction,
+      sanctioned_amount: account.sanctioned_amount,
+      disbursed_amount: account.disbursed_amount,
+      moratorium_period_months: account.moratorium_period_months,
+      moratorium_end_date: account.moratorium_end_date,
+      is_in_moratorium: account.is_in_moratorium,
+      possession_date: account.possession_date,
+      actual_moratorium_emi: account.actual_moratorium_emi,
+      // Sharing fields
+      is_pool_contribution: account.is_pool_contribution,
+      is_shared: account.is_shared,
+      split_type: account.split_type
+    }));
+    
+    console.log('Retrieved and mapped accounts:', mappedAccounts.length, mappedAccounts);
+    return mappedAccounts;
+  } catch (error) {
+    console.error('Error fetching financial accounts:', error);
+    return [];
+  }
+};
+
+export const addFinancialAccount = async (account: any) => {
+  try {
+    console.log('addFinancialAccount called with:', account);
+    
+    const user = await getCurrentUser();
+    if (!user) throw new Error('No user logged in');
+
+    console.log('Current user:', user.id);
+
+    // Map the UI account type to database-allowed type
+    const uiAccountType = account.type || account.account_type || 'other';
+    const dbAccountType = mapAccountTypeToDatabase(uiAccountType);
+    
+    console.log('Account type mapping:', { uiType: uiAccountType, dbType: dbAccountType });
+
+    const insertData = {
+      user_id: user.id,
+      name: account.name,
+      account_type: dbAccountType,
+      balance: account.balance || account.current_balance || 0,
+      bank_name: account.bank_name || null,
+      account_number_masked: account.account_number || null,
+      group_id: account.group_id || null,
+      currency: 'INR',
+      is_active: account.is_active !== false,
+      // Credit card specific fields
+      credit_limit: account.credit_limit || null,
+      // Loan specific fields
+      interest_rate: account.interest_rate || null,
+      monthly_emi: account.monthly_emi || null,
+      next_due_date: account.next_due_date || null,
+      remaining_terms: account.remaining_terms || null,
+      principal_amount: account.principal_amount || null,
+      loan_tenure_months: account.loan_tenure_months || null,
+      interest_type: account.interest_type || null,
+      processing_fee: account.processing_fee || null,
+      processing_fee_percentage: account.processing_fee_percentage || null,
+      is_no_cost_emi: account.is_no_cost_emi || null,
+      is_interest_free: account.is_interest_free || null,
+      emi_start_date: account.emi_start_date || null,
+      // Home loan specific fields
+      is_home_loan: account.is_home_loan || null,
+      is_under_construction: account.is_under_construction || null,
+      sanctioned_amount: account.sanctioned_amount || null,
+      disbursed_amount: account.disbursed_amount || null,
+      moratorium_period_months: account.moratorium_period_months || null,
+      moratorium_end_date: account.moratorium_end_date || null,
+      is_in_moratorium: account.is_in_moratorium || null,
+      possession_date: account.possession_date || null,
+      actual_moratorium_emi: account.actual_moratorium_emi || null,
+      // Sharing fields
+      is_pool_contribution: account.is_pool_contribution || false,
+      is_shared: account.is_shared || false,
+      split_type: account.split_type || null
+    };
+
+    console.log('Inserting account data:', insertData);
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase error:', error);
+      throw error;
+    }
+    
+    console.log('Account successfully created:', data);
+    return data;
+  } catch (error) {
+    console.error('Error adding financial account:', error);
+    return null;
+  }
+};
+
+export const updateFinancialAccount = async (accountId: string, updates: any) => {
+  try {
+    console.log('updateFinancialAccount called with:', updates);
+    
+    // Map UI fields to database fields
+    const mappedUpdates = { ...updates };
+    
+    // Map type to account_type if present
+    if (mappedUpdates.type) {
+      mappedUpdates.account_type = mapAccountTypeToDatabase(mappedUpdates.type);
+      delete mappedUpdates.type; // Remove the UI field
+    }
+    
+    console.log('Mapped updates for database:', mappedUpdates);
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .update(mappedUpdates)
+      .eq('id', accountId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    
+    console.log('Account updated successfully:', data);
+    return data;
+  } catch (error) {
+    console.error('Error updating financial account:', error);
+    return null;
+  }
+};
+
+export const deleteFinancialAccount = async (accountId: string) => {
+  try {
+    const { error } = await supabase
+      .from('accounts')
+      .delete()
+      .eq('id', accountId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error deleting financial account:', error);
+    return false;
   }
 };
 

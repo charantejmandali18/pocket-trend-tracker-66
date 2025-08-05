@@ -163,38 +163,36 @@ class StorageService {
       : await SupabaseStorage.clearAllStoredData();
   }
 
-  // Additional local storage methods that might not exist in Supabase
+  // Financial account methods - properly implemented for both storage types
   async addFinancialAccount(account: any) {
-    console.log('StorageService.addFinancialAccount called:', { useLocalStorage: this.useLocalStorage, account });
+    console.log('StorageService.addFinancialAccount called - routing to', this.useLocalStorage ? 'localStorage' : 'Supabase');
+    
     if (this.useLocalStorage) {
-      const result = LocalStorage.addFinancialAccount(account);
-      console.log('LocalStorage.addFinancialAccount result:', result);
-      return result;
+      return LocalStorage.addFinancialAccount(account);
     }
-    // Fallback for Supabase - could implement or return mock
-    throw new Error('addFinancialAccount not implemented for Supabase storage');
+    
+    return await SupabaseStorage.addFinancialAccount(account);
   }
 
   async updateFinancialAccount(accountId: string, updates: any) {
     if (this.useLocalStorage) {
       return LocalStorage.updateFinancialAccount(accountId, updates);
     }
-    throw new Error('updateFinancialAccount not implemented for Supabase storage');
+    return await SupabaseStorage.updateFinancialAccount(accountId, updates);
   }
 
   async deleteFinancialAccount(accountId: string) {
     if (this.useLocalStorage) {
       return LocalStorage.deleteFinancialAccount(accountId);
     }
-    throw new Error('deleteFinancialAccount not implemented for Supabase storage');
+    return await SupabaseStorage.deleteFinancialAccount(accountId);
   }
 
   async getFinancialAccounts() {
     if (this.useLocalStorage) {
       return LocalStorage.getFinancialAccounts();
     }
-    // Fallback for Supabase
-    return [];
+    return await SupabaseStorage.getFinancialAccounts();
   }
 
   getCreditCards() {

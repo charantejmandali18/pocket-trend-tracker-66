@@ -14,6 +14,7 @@ import {
   Plus, 
   Calendar as CalendarIcon,
   CreditCard,
+  CreditCard as CreditCardIcon,
   Wallet,
   Smartphone,
   Building,
@@ -24,12 +25,15 @@ import {
   Palette,
   Edit2,
   Trash2,
-  MoreHorizontal
+  MoreHorizontal,
+  Target
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Link } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { STORAGE_CONFIG } from '@/config/storage';
+// Import from unified storage service
 import { 
   addStoredTransaction, 
   updateStoredTransaction,
@@ -37,20 +41,20 @@ import {
   getStoredTransactions,
   getPersonalTransactions,
   getGroupTransactions,
-  getPersonalFinancialAccounts,
-  getGroupFinancialAccounts,
+  getFinancialAccounts,
+  updateFinancialAccount,
   type StoredTransaction,
   type FinancialAccount
-} from '@/utils/dataStorage';
+} from '@/utils/storageService';
 
 type Transaction = StoredTransaction;
 
 const AddTransaction = () => {
-  const { user, categories, isPersonalMode, currentGroup, addCategory } = useApp();
+  const { user, categories, isPersonalMode, currentGroup, addCategory, refreshData } = useApp();
   const { toast } = useToast();
 
   const [transaction, setTransaction] = useState<Partial<StoredTransaction>>({
-    transaction_type: 'expense',
+    transaction_type: 'debit', // Changed from 'expense' to 'debit'
     amount: 0,
     description: '',
     category_id: '',
@@ -59,6 +63,11 @@ const AddTransaction = () => {
     account_name: '',
     notes: ''
   });
+  
+  const [insufficientBalance, setInsufficientBalance] = useState(false);
+  const [noCashAccount, setNoCashAccount] = useState(false);
+  const [noCreditCardAccount, setNoCreditCardAccount] = useState(false);
+  const [noLoanAccount, setNoLoanAccount] = useState(false);
 
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -70,7 +79,7 @@ const AddTransaction = () => {
   const [showEditTransaction, setShowEditTransaction] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editTransaction, setEditTransaction] = useState<Partial<StoredTransaction>>({
-    transaction_type: 'expense',
+    transaction_type: 'debit',
     amount: 0,
     description: '',
     category_id: '',
@@ -90,23 +99,112 @@ const AddTransaction = () => {
     fetchAccounts();
   }, [user, isPersonalMode, currentGroup]);
 
+  // Auto-select account based on payment method
+  useEffect(() => {
+    if (accounts.length > 0 && transaction.payment_method) {
+      autoSelectAccount();
+    }
+  }, [accounts, transaction.payment_method]);
+
+  const autoSelectAccount = () => {
+    if (!transaction.payment_method || accounts.length === 0) return;
+
+    let suggestedAccount;
+    
+    switch (transaction.payment_method) {
+      case 'cash':
+        // Find cash account only - cash is liquid and separate from banks
+        suggestedAccount = accounts.find(a => a.type === 'cash');
+        break;
+      case 'debit_card':
+        // Debits card uses your bank account money (savings/checking)
+        suggestedAccount = accounts.find(a => 
+          a.type === 'savings' || a.type === 'checking'
+        );
+        break;
+      case 'credit_card':
+        // Credit card uses credit line from credit card accounts
+        suggestedAccount = accounts.find(a => a.type === 'credit_card');
+        break;
+      case 'loan_payment':
+        // For loan payments, select the first loan account
+        suggestedAccount = accounts.find(a => a.type === 'loan');
+        break;
+      case 'upi':
+      case 'bank_transfer':
+        // Find bank accounts only (savings, checking)
+        suggestedAccount = accounts.find(a => 
+          a.type === 'savings' || a.type === 'checking'
+        );
+        break;
+    }
+
+    // Special handling for specific payment methods - don't fallback to other accounts
+    if (transaction.payment_method === 'cash' && !suggestedAccount) {
+      setNoCashAccount(true);
+      setNoCreditCardAccount(false);
+      return;
+    } else if (transaction.payment_method === 'credit_card' && !suggestedAccount) {
+      setNoCreditCardAccount(true);
+      setNoCashAccount(false);
+      setNoLoanAccount(false);
+      return;
+    } else if (transaction.payment_method === 'loan_payment' && !suggestedAccount) {
+      setNoLoanAccount(true);
+      setNoCashAccount(false);
+      setNoCreditCardAccount(false);
+      return;
+    } else {
+      setNoCashAccount(false);
+      setNoCreditCardAccount(false);
+      setNoLoanAccount(false);
+    }
+
+    // For generic payment methods, if no specific account found, use the first available account
+    if (!suggestedAccount && !['cash', 'credit_card', 'loan_payment'].includes(transaction.payment_method!)) {
+      suggestedAccount = accounts[0];
+    }
+
+    if (suggestedAccount && (!transaction.account_name || transaction.account_name === '')) {
+      setTransaction(prev => ({ ...prev, account_name: suggestedAccount!.name }));
+    }
+  };
+
   const paymentMethods = [
     { id: 'cash', name: 'Cash', icon: Wallet },
-    { id: 'card', name: 'Credit/Debit Card', icon: CreditCard },
+    { id: 'debit_card', name: 'Debit Card', icon: CreditCard },
+    { id: 'credit_card', name: 'Credit Card', icon: CreditCardIcon },
     { id: 'upi', name: 'UPI', icon: Smartphone },
     { id: 'bank_transfer', name: 'Bank Transfer', icon: Building },
+    { id: 'loan_payment', name: 'Loan Payment', icon: Target },
   ];
 
-  const fetchAccounts = () => {
+  const fetchAccounts = async () => {
     if (!user) return;
 
     try {
+      console.log('🔄 AddTransaction fetching accounts for user:', user.id, 'Personal mode:', isPersonalMode);
+      const allAccounts = await getFinancialAccounts();
+      console.log('📊 AddTransaction - All accounts from storage:', allAccounts.length, allAccounts);
+      
       let userAccounts: FinancialAccount[] = [];
       if (isPersonalMode) {
-        userAccounts = getPersonalFinancialAccounts(user.id);
+        // Personal mode: get accounts with no group_id
+        userAccounts = allAccounts.filter(a => 
+          a.user_id === user.id && 
+          (a.group_id === null || a.group_id === undefined) &&
+          a.is_active
+        );
+        console.log('👤 AddTransaction - Personal accounts filtered:', userAccounts.length);
       } else if (currentGroup) {
-        userAccounts = getGroupFinancialAccounts(currentGroup.id);
+        // Group mode: get accounts for this specific group
+        userAccounts = allAccounts.filter(a => 
+          a.group_id === currentGroup.id &&
+          a.is_active
+        );
+        console.log('👥 AddTransaction - Group accounts filtered:', userAccounts.length);
       }
+      
       setAccounts(userAccounts);
     } catch (error) {
       console.error('Error fetching accounts:', error);
@@ -115,15 +213,39 @@ const AddTransaction = () => {
 
   const quickAmounts = [50, 100, 200, 500, 1000, 2000];
 
-  const fetchRecentTransactions = () => {
+  // Filter accounts based on selected payment method
+  const getEligibleAccounts = (paymentMethod: string) => {
+    if (!paymentMethod) return accounts;
+
+    switch (paymentMethod) {
+      case 'cash':
+        return accounts.filter(account => account.type === 'cash');
+      case 'debit_card':
+      case 'upi':
+      case 'bank_transfer':
+        return accounts.filter(account => 
+          account.type === 'savings' || 
+          account.type === 'checking' || 
+          account.type === 'current'
+        );
+      case 'credit_card':
+        return accounts.filter(account => account.type === 'credit_card');
+      case 'loan_payment':
+        return accounts.filter(account => account.type === 'loan');
+      default:
+        return accounts;
+    }
+  };
+
+  const fetchRecentTransactions = async () => {
     if (!user) return;
 
     try {
       let transactions: StoredTransaction[] = [];
       if (isPersonalMode) {
-        transactions = getPersonalTransactions(user.id, user.email);
+        transactions = await getPersonalTransactions(user.id, user.email);
       } else if (currentGroup) {
-        transactions = getGroupTransactions(currentGroup.id);
+        transactions = await getGroupTransactions(currentGroup.id);
       }
       
       // Sort by created_at descending and take latest 10
@@ -137,7 +259,45 @@ const AddTransaction = () => {
     }
   };
 
-  const handleSave = () => {
+  const updateAccountBalance = async (accountName: string, amount: number, transactionType: 'credit' | 'debit') => {
+    try {
+      const account = accounts.find(a => a.name === accountName);
+      if (!account) {
+        console.error('Account not found:', accountName);
+        return false;
+      }
+
+      // Calculate new balance based on transaction type and account type
+      let newBalance;
+      
+      if (account.type === 'credit_card') {
+        // For credit cards: debit increases outstanding balance, credit decreases it
+        if (transactionType === 'debit') {
+          newBalance = account.balance + amount; // Increase outstanding amount
+        } else {
+          newBalance = account.balance - amount; // Decrease outstanding amount (payment)
+        }
+      } else {
+        // For regular accounts (cash, savings, checking): debit decreases balance, credit increases it
+        if (transactionType === 'debit') {
+          newBalance = account.balance - amount; // Money going out
+        } else {
+          newBalance = account.balance + amount; // Money coming in
+        }
+      }
+
+      console.log(`💰 Updating ${account.type} account ${accountName}: ${account.balance} -> ${newBalance} (${transactionType} ₹${amount})`);
+
+      // Update account balance
+      const result = await updateFinancialAccount(account.id, { balance: newBalance });
+      return result !== null;
+    } catch (error) {
+      console.error('Error updating account balance:', error);
+      return false;
+    }
+  };
+
+  const handleSave = async () => {
     if (!user || !transaction.description || !transaction.amount || !transaction.category_id) {
       toast({
         title: "Error",
@@ -147,11 +307,135 @@ const AddTransaction = () => {
       return;
     }
 
+    // Special validation for cash transactions
+    if (transaction.payment_method === 'cash') {
+      const cashAccount = accounts.find(a => a.type === 'cash');
+      if (!cashAccount) {
+        toast({
+          title: "No Cash Account",
+          description: "Please add a cash account first to record cash transactions. You can add one from the Accounts page.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Check cash balance for expenses
+      if (transaction.transaction_type === 'debit' && cashAccount.balance < transaction.amount!) {
+        toast({
+          title: "Insufficient Cash Balance",
+          description: `You don't have enough cash. Available: ₹${cashAccount.balance.toLocaleString()}, Required: ₹${transaction.amount!.toLocaleString()}`,
+          variant: "destructive",
+        });
+        setInsufficientBalance(true);
+        return;
+      }
+    }
+
+    // Special validation for credit card transactions
+    if (transaction.payment_method === 'credit_card') {
+      const creditCardAccount = accounts.find(a => a.type === 'credit_card');
+      if (!creditCardAccount) {
+        toast({
+          title: "No Credit Card Account",
+          description: "Please add a credit card account first to record credit card transactions. You can add one from the Accounts page.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // For credit cards, check available credit limit for expenses
+      if (transaction.transaction_type === 'debit') {
+        const availableCredit = (creditCardAccount.credit_limit || 0) - (creditCardAccount.balance || 0);
+        if (availableCredit < transaction.amount!) {
+          toast({
+            title: "Credit Limit Exceeded",
+            description: `Transaction exceeds available credit. Available: ₹${availableCredit.toLocaleString()}, Required: ₹${transaction.amount!.toLocaleString()}`,
+            variant: "destructive",
+          });
+          setInsufficientBalance(true);
+          return;
+        }
+      }
+    }
+
+    // Special validation for loan payment transactions
+    if (transaction.payment_method === 'loan_payment') {
+      const loanAccount = accounts.find(a => a.type === 'loan');
+      if (!loanAccount) {
+        toast({
+          title: "No Loan Account",
+          description: "Please add a loan account first to record loan payments. You can add one from the Accounts page.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // For loan payments, ensure we're making a payment (debit transaction)
+      if (transaction.transaction_type !== 'debit') {
+        toast({
+          title: "Invalid Loan Transaction",
+          description: "Loan payments should be debit transactions (reducing loan balance).",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Check if payment amount doesn't exceed outstanding loan balance
+      if (transaction.amount! > loanAccount.balance) {
+        toast({
+          title: "Payment Exceeds Loan Balance",
+          description: `Payment amount exceeds outstanding loan balance. Outstanding: ₹${loanAccount.balance.toLocaleString()}, Payment: ₹${transaction.amount!.toLocaleString()}`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Validate account selection for other payment methods
+    if (!['cash', 'credit_card', 'loan_payment'].includes(transaction.payment_method!) && !transaction.account_name) {
+      toast({
+        title: "Error",
+        description: "Please select an account for this transaction",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setInsufficientBalance(false);
+
     try {
+      // Determine the account to use based on payment method
+      let accountToUse = transaction.account_name;
+      if (transaction.payment_method === 'cash') {
+        const cashAccount = accounts.find(a => a.type === 'cash');
+        accountToUse = cashAccount!.name;
+      } else if (transaction.payment_method === 'credit_card') {
+        const creditCardAccount = accounts.find(a => a.type === 'credit_card');
+        accountToUse = creditCardAccount!.name;
+      } else if (transaction.payment_method === 'loan_payment') {
+        const loanAccount = accounts.find(a => a.type === 'loan');
+        accountToUse = loanAccount!.name;
+      }
+
+      // First update account balance
+      const balanceUpdated = await updateAccountBalance(
+        accountToUse!,
+        transaction.amount!,
+        transaction.transaction_type!
+      );
+
+      if (!balanceUpdated) {
+        toast({
+          title: "Error",
+          description: "Failed to update account balance",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const selectedCategory = categories.find(c => c.id === transaction.category_id);
       
-      const newTransaction: StoredTransaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const newTransaction: Omit<StoredTransaction, 'id' | 'created_at' | 'updated_at'> = {
         user_id: user.id,
         group_id: isPersonalMode ? null : currentGroup?.id || null,
         created_by: user.id,
@@ -161,29 +445,38 @@ const AddTransaction = () => {
         category_id: transaction.category_id || '',
         transaction_date: transaction.transaction_date || format(new Date(), 'yyyy-MM-dd'),
         payment_method: transaction.payment_method || 'cash',
-        account_name: transaction.account_name || '',
+        account_name: accountToUse || '',
         notes: transaction.notes || '',
         source: 'manual',
-        created_at: new Date().toISOString(),
-        member_email: user.email || '',
-        categories: selectedCategory ? {
-          id: selectedCategory.id,
-          name: selectedCategory.name,
-          color: selectedCategory.color || '#3B82F6',
-          icon: selectedCategory.icon
-        } : undefined
+        member_email: user.email || ''
       };
 
-      addStoredTransaction(newTransaction);
+      const result = await addStoredTransaction(newTransaction);
+
+      if (!result) {
+        // If transaction creation failed, we should rollback the account balance
+        await updateAccountBalance(
+          accountToUse!,
+          transaction.amount!,
+          transaction.transaction_type === 'debit' ? 'credit' : 'debit' // Reverse the operation
+        );
+        
+        toast({
+          title: "Error",
+          description: "Failed to save transaction",
+          variant: "destructive",
+        });
+        return;
+      }
 
       toast({
         title: "Success",
-        description: "Transaction added successfully!",
+        description: "Transaction added successfully and account balance updated!",
       });
 
       // Reset form
       setTransaction({
-        transaction_type: 'expense',
+        transaction_type: 'debit',
         amount: 0,
         description: '',
         category_id: '',
@@ -193,8 +486,12 @@ const AddTransaction = () => {
         notes: ''
       });
 
-      // Refresh recent transactions
-      fetchRecentTransactions();
+      // Refresh both transactions and accounts
+      await fetchRecentTransactions();
+      await fetchAccounts();
+      
+      // Refresh data to update sidebar statistics
+      refreshData();
     } catch (error) {
       console.error('Error saving transaction:', error);
       toast({
@@ -232,17 +529,40 @@ const AddTransaction = () => {
     setShowEditTransaction(true);
   };
 
-  const handleUpdateTransaction = () => {
-    if (!editingTransaction || !editTransaction.description || !editTransaction.amount || !editTransaction.category_id) {
+  const handleUpdateTransaction = async () => {
+    if (!editingTransaction || !editTransaction.description || !editTransaction.amount || !editTransaction.category_id || !editTransaction.account_name) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields including account selection",
         variant: "destructive",
       });
       return;
     }
 
     try {
+      // Handle account balance changes if amount, type, or account changed
+      const amountChanged = editingTransaction.amount !== editTransaction.amount;
+      const typeChanged = editingTransaction.transaction_type !== editTransaction.transaction_type;
+      const accountChanged = editingTransaction.account_name !== editTransaction.account_name;
+
+      if (amountChanged || typeChanged || accountChanged) {
+        // Reverse the original transaction's effect on the old account
+        if (editingTransaction.account_name) {
+          await updateAccountBalance(
+            editingTransaction.account_name,
+            editingTransaction.amount,
+            editingTransaction.transaction_type === 'debit' ? 'credit' : 'debit'
+          );
+        }
+
+        // Apply the new transaction's effect on the new account
+        await updateAccountBalance(
+          editTransaction.account_name!,
+          editTransaction.amount!,
+          editTransaction.transaction_type!
+        );
+      }
+
       const selectedCategory = categories.find(c => c.id === editTransaction.category_id);
       
       const updates: Partial<StoredTransaction> = {
@@ -253,26 +573,29 @@ const AddTransaction = () => {
         transaction_date: editTransaction.transaction_date || format(new Date(), 'yyyy-MM-dd'),
         payment_method: editTransaction.payment_method || 'cash',
         account_name: editTransaction.account_name || '',
-        notes: editTransaction.notes || '',
-        categories: selectedCategory ? {
-          id: selectedCategory.id,
-          name: selectedCategory.name,
-          color: selectedCategory.color || '#3B82F6',
-          icon: selectedCategory.icon
-        } : undefined
+        notes: editTransaction.notes || ''
       };
 
-      updateStoredTransaction(editingTransaction.id, updates);
+      const result = await updateStoredTransaction(editingTransaction.id, updates);
+
+      if (!result) {
+        toast({
+          title: "Error",
+          description: "Failed to update transaction",
+          variant: "destructive",
+        });
+        return;
+      }
 
       toast({
         title: "Success",
-        description: "Transaction updated successfully!",
+        description: "Transaction updated successfully and account balances updated!",
       });
 
       // Reset form and close dialog
       setEditingTransaction(null);
       setEditTransaction({
-        transaction_type: 'expense',
+        transaction_type: 'debit',
         amount: 0,
         description: '',
         category_id: '',
@@ -283,8 +606,12 @@ const AddTransaction = () => {
       });
       setShowEditTransaction(false);
 
-      // Refresh recent transactions
-      fetchRecentTransactions();
+      // Refresh both transactions and accounts
+      await fetchRecentTransactions();
+      await fetchAccounts();
+      
+      // Refresh data to update sidebar statistics
+      refreshData();
     } catch (error) {
       console.error('Error updating transaction:', error);
       toast({
@@ -295,21 +622,46 @@ const AddTransaction = () => {
     }
   };
 
-  const handleDeleteTransaction = (transactionId: string, description: string) => {
+  const handleDeleteTransaction = async (transactionId: string, description: string) => {
     if (!confirm(`Are you sure you want to delete "${description}"? This action cannot be undone.`)) {
       return;
     }
 
     try {
-      deleteStoredTransaction(transactionId);
+      // Find the transaction to get its details for balance reversal
+      const transactionToDelete = recentTransactions.find(t => t.id === transactionId);
       
+      if (transactionToDelete && transactionToDelete.account_name) {
+        // Reverse the transaction's effect on the account balance
+        await updateAccountBalance(
+          transactionToDelete.account_name,
+          transactionToDelete.amount,
+          transactionToDelete.transaction_type === 'debit' ? 'credit' : 'debit'
+        );
+      }
+
+      const result = await deleteStoredTransaction(transactionId);
+      
+      if (!result) {
+        toast({
+          title: "Error",
+          description: "Failed to delete transaction",
+          variant: "destructive",
+        });
+        return;
+      }
+
       toast({
         title: "Transaction Deleted",
-        description: `Transaction "${description}" has been deleted successfully.`,
+        description: `Transaction "${description}" has been deleted and account balance updated.`,
       });
       
-      // Refresh recent transactions
-      fetchRecentTransactions();
+      // Refresh both transactions and accounts
+      await fetchRecentTransactions();
+      await fetchAccounts();
+      
+      // Refresh data to update sidebar statistics
+      refreshData();
       
     } catch (error) {
       console.error('Error deleting transaction:', error);
@@ -323,16 +675,18 @@ const AddTransaction = () => {
 
   const getTransactionTypeCategories = () => {
     return categories.filter(c => {
-      if (transaction.transaction_type === 'income') {
+      if (transaction.transaction_type === 'credit') {
         return c.name.toLowerCase().includes('income') || 
                c.name.toLowerCase().includes('salary') || 
                c.name.toLowerCase().includes('freelance') ||
-               c.name.toLowerCase().includes('investment');
+               c.name.toLowerCase().includes('investment') ||
+               c.name.toLowerCase().includes('credit');
       } else {
         return !c.name.toLowerCase().includes('income') && 
                !c.name.toLowerCase().includes('salary') && 
                !c.name.toLowerCase().includes('freelance') &&
-               !c.name.toLowerCase().includes('investment');
+               !c.name.toLowerCase().includes('investment') &&
+               !c.name.toLowerCase().includes('credit');
       }
     });
   };
@@ -366,20 +720,20 @@ const AddTransaction = () => {
                 <Label>Transaction Type</Label>
                 <div className="flex space-x-2 mt-2">
                   <Button
-                    variant={transaction.transaction_type === 'expense' ? 'default' : 'outline'}
-                    onClick={() => setTransaction({...transaction, transaction_type: 'expense', category_id: ''})}
+                    variant={transaction.transaction_type === 'debit' ? 'default' : 'outline'}
+                    onClick={() => setTransaction({...transaction, transaction_type: 'debit', category_id: ''})}
                     className="flex-1"
                   >
                     <TrendingDown className="h-4 w-4 mr-2" />
-                    Expense
+                    Debit
                   </Button>
                   <Button
-                    variant={transaction.transaction_type === 'income' ? 'default' : 'outline'}
-                    onClick={() => setTransaction({...transaction, transaction_type: 'income', category_id: ''})}
+                    variant={transaction.transaction_type === 'credit' ? 'default' : 'outline'}
+                    onClick={() => setTransaction({...transaction, transaction_type: 'credit', category_id: ''})}
                     className="flex-1"
                   >
                     <TrendingUp className="h-4 w-4 mr-2" />
-                    Income
+                    Credit
                   </Button>
                 </div>
               </div>
@@ -392,9 +746,18 @@ const AddTransaction = () => {
                     id="amount"
                     type="number"
                     value={transaction.amount || ''}
-                    onChange={(e) => setTransaction({...transaction, amount: parseFloat(e.target.value) || 0})}
+                    onChange={(e) => {
+                      const amount = parseFloat(e.target.value) || 0;
+                      setTransaction({...transaction, amount});
+                      
+                      // Check balance for cash transactions
+                      if (transaction.payment_method === 'cash' && transaction.transaction_type === 'debit' && transaction.account_name) {
+                        const cashAccount = accounts.find(a => a.name === transaction.account_name);
+                        setInsufficientBalance(cashAccount ? cashAccount.balance < amount : false);
+                      }
+                    }}
                     placeholder="Enter amount"
-                    className="text-xl font-semibold"
+                    className={`text-xl font-semibold ${insufficientBalance ? 'border-red-300' : ''}`}
                   />
                   <div className="flex space-x-2">
                     {quickAmounts.map((amount) => (
@@ -402,7 +765,15 @@ const AddTransaction = () => {
                         key={amount}
                         variant="outline"
                         size="sm"
-                        onClick={() => setTransaction({...transaction, amount})}
+                        onClick={() => {
+                          setTransaction({...transaction, amount});
+                          
+                          // Check balance for cash transactions
+                          if (transaction.payment_method === 'cash' && transaction.transaction_type === 'debit' && transaction.account_name) {
+                            const cashAccount = accounts.find(a => a.name === transaction.account_name);
+                            setInsufficientBalance(cashAccount ? cashAccount.balance < amount : false);
+                          }
+                        }}
                       >
                         ₹{amount}
                       </Button>
@@ -504,7 +875,7 @@ const AddTransaction = () => {
                     <Button
                       key={method.id}
                       variant={transaction.payment_method === method.id ? 'default' : 'outline'}
-                      onClick={() => setTransaction({...transaction, payment_method: method.id})}
+                      onClick={() => setTransaction({...transaction, payment_method: method.id, account_name: ''})}
                       className="justify-start"
                     >
                       <method.icon className="h-4 w-4 mr-2" />
@@ -518,23 +889,65 @@ const AddTransaction = () => {
               <div>
                 <Label>Account</Label>
                 <Select value={transaction.account_name} onValueChange={(value) => setTransaction({...transaction, account_name: value})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select account" />
+                  <SelectTrigger className={insufficientBalance ? 'border-red-300' : ''}>
+                    <SelectValue placeholder="Account will be auto-selected" />
                   </SelectTrigger>
                   <SelectContent>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={account.name}>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-3 h-3 rounded-full bg-blue-500" />
-                          <span>{account.name}</span>
-                          <span className="text-xs text-gray-500">
-                            ({account.type} • ₹{account.balance.toLocaleString()})
-                          </span>
-                        </div>
+                    {getEligibleAccounts(transaction.payment_method || '').length > 0 ? (
+                      getEligibleAccounts(transaction.payment_method || '').map((account) => (
+                        <SelectItem key={account.id} value={account.name}>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-blue-500" />
+                            <span>{account.name}</span>
+                            <span className={`text-xs ${
+                              transaction.payment_method === 'cash' && 
+                              transaction.transaction_type === 'debit' && 
+                              account.balance < (transaction.amount || 0)
+                                ? 'text-red-500' 
+                                : 'text-gray-500'
+                            }`}>
+                              ({account.type} • ₹{account.balance.toLocaleString()})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-accounts" disabled>
+                        {transaction.payment_method === 'cash' 
+                          ? 'No cash account available. Please add a cash account first.'
+                          : transaction.payment_method === 'credit_card'
+                          ? 'No credit card account available. Please add a credit card account first.'
+                          : transaction.payment_method === 'loan_payment'
+                          ? 'No loan account available. Please add a loan account first.'
+                          : (transaction.payment_method === 'debit_card' || transaction.payment_method === 'upi' || transaction.payment_method === 'bank_transfer')
+                          ? 'No bank account available. Please add a savings/checking account first.'
+                          : 'No eligible accounts available. Please add an account first.'
+                        }
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
+                {noCashAccount && transaction.payment_method === 'cash' && (
+                  <div className="text-sm text-orange-600 mt-1 p-2 bg-orange-50 rounded">
+                    <p>💡 No cash account found. <Link to="/accounts" className="underline font-medium">Add a cash account</Link> to track cash transactions.</p>
+                  </div>
+                )}
+                {noCreditCardAccount && transaction.payment_method === 'credit_card' && (
+                  <div className="text-sm text-orange-600 mt-1 p-2 bg-orange-50 rounded">
+                    <p>💳 No credit card account found. <Link to="/accounts" className="underline font-medium">Add a credit card account</Link> to track credit card transactions.</p>
+                  </div>
+                )}
+                {noLoanAccount && transaction.payment_method === 'loan_payment' && (
+                  <div className="text-sm text-orange-600 mt-1 p-2 bg-orange-50 rounded">
+                    <p>🏦 No loan account found. <Link to="/accounts" className="underline font-medium">Add a loan account</Link> to track loan payments.</p>
+                  </div>
+                )}
+                {insufficientBalance && (
+                  <p className="text-sm text-red-600 mt-1">⚠️ Insufficient balance in selected account</p>
+                )}
+                {transaction.account_name && !noCashAccount && !noCreditCardAccount && !noLoanAccount && (
+                  <p className="text-sm text-green-600 mt-1">✓ Account auto-selected based on payment method</p>
+                )}
               </div>
 
               {/* Notes */}
@@ -583,8 +996,8 @@ const AddTransaction = () => {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <div className={`text-sm font-semibold ${trans.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                          {trans.transaction_type === 'income' ? '+' : '-'}₹{trans.amount}
+                        <div className={`text-sm font-semibold ${trans.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
+                          {trans.transaction_type === 'credit' ? '+' : '-'}₹{trans.amount}
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -632,23 +1045,23 @@ const AddTransaction = () => {
                   const todayTransactions = recentTransactions.filter(t => 
                     t.transaction_date === today
                   );
-                  const todayIncome = todayTransactions
-                    .filter(t => t.transaction_type === 'income')
+                  const todayCredits = todayTransactions
+                    .filter(t => t.transaction_type === 'credit')
                     .reduce((sum, t) => sum + t.amount, 0);
-                  const todayExpenses = todayTransactions
-                    .filter(t => t.transaction_type === 'expense')
+                  const todayDebitss = todayTransactions
+                    .filter(t => t.transaction_type === 'debit')
                     .reduce((sum, t) => sum + t.amount, 0);
-                  const net = todayIncome - todayExpenses;
+                  const net = todayCredits - todayDebitss;
 
                   return (
                     <>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Income</span>
-                        <span className="font-medium text-green-600">₹{todayIncome.toLocaleString()}</span>
+                        <span className="text-gray-600">Credits</span>
+                        <span className="font-medium text-green-600">₹{todayCredits.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Expenses</span>
-                        <span className="font-medium text-red-600">₹{todayExpenses.toLocaleString()}</span>
+                        <span className="text-gray-600">Debitss</span>
+                        <span className="font-medium text-red-600">₹{todayDebitss.toLocaleString()}</span>
                       </div>
                       <hr />
                       <div className="flex justify-between text-sm font-medium">
@@ -678,20 +1091,20 @@ const AddTransaction = () => {
               <Label>Transaction Type</Label>
               <div className="flex space-x-2 mt-2">
                 <Button
-                  variant={editTransaction.transaction_type === 'expense' ? 'default' : 'outline'}
-                  onClick={() => setEditTransaction({...editTransaction, transaction_type: 'expense', category_id: ''})}
+                  variant={editTransaction.transaction_type === 'debit' ? 'default' : 'outline'}
+                  onClick={() => setEditTransaction({...editTransaction, transaction_type: 'debit', category_id: ''})}
                   className="flex-1"
                 >
                   <TrendingDown className="h-4 w-4 mr-2" />
-                  Expense
+                  Debit
                 </Button>
                 <Button
-                  variant={editTransaction.transaction_type === 'income' ? 'default' : 'outline'}
-                  onClick={() => setEditTransaction({...editTransaction, transaction_type: 'income', category_id: ''})}
+                  variant={editTransaction.transaction_type === 'credit' ? 'default' : 'outline'}
+                  onClick={() => setEditTransaction({...editTransaction, transaction_type: 'credit', category_id: ''})}
                   className="flex-1"
                 >
                   <TrendingUp className="h-4 w-4 mr-2" />
-                  Income
+                  Credit
                 </Button>
               </div>
             </div>
@@ -729,11 +1142,12 @@ const AddTransaction = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {categories.filter(c => {
-                    if (editTransaction.transaction_type === 'income') {
+                    if (editTransaction.transaction_type === 'credit') {
                       return c.name.toLowerCase().includes('income') || 
                              c.name.toLowerCase().includes('salary') || 
                              c.name.toLowerCase().includes('freelance') ||
-                             c.name.toLowerCase().includes('investment');
+                             c.name.toLowerCase().includes('investment') ||
+                             c.name.toLowerCase().includes('credit');
                     } else {
                       return !c.name.toLowerCase().includes('income') && 
                              !c.name.toLowerCase().includes('salary') && 
@@ -770,7 +1184,7 @@ const AddTransaction = () => {
                   <Button
                     key={method.id}
                     variant={editTransaction.payment_method === method.id ? 'default' : 'outline'}
-                    onClick={() => setEditTransaction({...editTransaction, payment_method: method.id})}
+                    onClick={() => setEditTransaction({...editTransaction, payment_method: method.id, account_name: ''})}
                     className="justify-start"
                   >
                     <method.icon className="h-4 w-4 mr-2" />
@@ -788,17 +1202,32 @@ const AddTransaction = () => {
                   <SelectValue placeholder="Select account" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.id} value={account.name}>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-3 h-3 rounded-full bg-blue-500" />
-                        <span>{account.name}</span>
-                        <span className="text-xs text-gray-500">
-                          ({account.type} • ₹{account.balance.toLocaleString()})
-                        </span>
-                      </div>
+                  {getEligibleAccounts(editTransaction.payment_method || '').length > 0 ? (
+                    getEligibleAccounts(editTransaction.payment_method || '').map((account) => (
+                      <SelectItem key={account.id} value={account.name}>
+                        <div className="flex items-center space-x-2">
+                          <div className="w-3 h-3 rounded-full bg-blue-500" />
+                          <span>{account.name}</span>
+                          <span className="text-xs text-gray-500">
+                            ({account.type} • ₹{account.balance.toLocaleString()})
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-accounts" disabled>
+                      {editTransaction.payment_method === 'cash' 
+                        ? 'No cash account available. Please add a cash account first.'
+                        : editTransaction.payment_method === 'credit_card'
+                        ? 'No credit card account available. Please add a credit card account first.'
+                        : editTransaction.payment_method === 'loan_payment'
+                        ? 'No loan account available. Please add a loan account first.'
+                        : (editTransaction.payment_method === 'debit_card' || editTransaction.payment_method === 'upi' || editTransaction.payment_method === 'bank_transfer')
+                        ? 'No bank account available. Please add a savings/checking account first.'
+                        : 'No eligible accounts available. Please add an account first.'
+                      }
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
             </div>
