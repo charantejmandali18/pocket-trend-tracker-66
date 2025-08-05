@@ -2,11 +2,11 @@
 export const STORAGE_CONFIG = {
   // Set to true to use localStorage for data, false to use Supabase for data
   // Note: Authentication ALWAYS uses Supabase regardless of this setting
-  // Currently using local storage for data since Supabase database has RLS policy issues
-  USE_LOCAL_STORAGE: true,
+  // Now using Supabase for all data storage
+  USE_LOCAL_STORAGE: false,
   
-  // This will be set to true once Supabase RLS policies are fixed
-  SUPABASE_READY: false
+  // Supabase is ready and configured
+  SUPABASE_READY: true
 };
 
 // Helper function to switch storage modes
