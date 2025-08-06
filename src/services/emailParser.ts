@@ -1,6 +1,6 @@
 import { gmailOAuthService } from './gmailOAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { simpleParser } from 'mailparser';
+import { convert } from 'html-to-text';
 
 // Types for parsed data
 export interface ParsedTransaction {
@@ -215,15 +215,21 @@ class EmailParsingService {
       const from = headers.find((h: any) => h.name.toLowerCase() === 'from')?.value || '';
       const date = headers.find((h: any) => h.name.toLowerCase() === 'date')?.value || '';
 
-      // Extract email body using simpleParser
-      const body = await this.extractEmailBody(message.payload);
+      // Extract email body using improved HTML-to-text conversion
+      const body = this.extractEmailBody(message.payload);
       
-      console.log('Parsing email with simpleParser:', { 
+      console.log('Parsing email with html-to-text:', { 
         subject, 
         from, 
         bodyLength: body.length,
         bodyPreview: body.substring(0, 200) + '...' // First 200 chars of body for debugging
       });
+
+      // Log the full email body for debugging
+      console.log('📧 Full Email Body Content:');
+      console.log('================================');
+      console.log(body);
+      console.log('================================');
 
       // Parse transaction if this looks like a transaction email
       if (this.isTransactionEmail(subject, body, from)) {
@@ -246,55 +252,8 @@ class EmailParsingService {
     return result;
   }
 
-  // Extract email body using simpleParser for better MIME handling
-  private async extractEmailBody(payload: any): Promise<string> {
-    try {
-      // First try to get the raw MIME content if available
-      const rawContent = this.extractRawContent(payload);
-      
-      if (rawContent) {
-        // Use simpleParser to parse the raw MIME content
-        const parsed = await simpleParser(rawContent);
-        return parsed.text || parsed.textAsHtml || '';
-      }
-      
-      // Fallback to manual extraction if no raw content
-      return this.extractBodyFallback(payload);
-      
-    } catch (error) {
-      console.error('Error parsing email with simpleParser:', error);
-      // Fallback to manual extraction
-      return this.extractBodyFallback(payload);
-    }
-  }
-
-  // Extract raw MIME content from Gmail payload
-  private extractRawContent(payload: any): Buffer | null {
-    try {
-      let rawData = '';
-      
-      // Handle single part message
-      if (payload.body?.data) {
-        rawData = this.decodeBase64(payload.body.data);
-      } 
-      // Handle multi-part message - reconstruct MIME
-      else if (payload.parts) {
-        for (const part of payload.parts) {
-          if (part.body?.data) {
-            rawData += this.decodeBase64(part.body.data) + '\n';
-          }
-        }
-      }
-      
-      return rawData ? Buffer.from(rawData, 'utf-8') : null;
-    } catch (error) {
-      console.error('Error extracting raw content:', error);
-      return null;
-    }
-  }
-
-  // Fallback method for manual body extraction
-  private extractBodyFallback(payload: any): string {
+  // Extract email body with improved HTML-to-text conversion
+  private extractEmailBody(payload: any): string {
     let body = '';
     let htmlBody = '';
     let textBody = '';
@@ -348,25 +307,31 @@ class EmailParsingService {
     }
   }
 
-  // Convert HTML to plain text
+  // Convert HTML to plain text using html-to-text library
   private htmlToText(html: string): string {
-    // Create a temporary DOM element to parse HTML
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    
-    // Remove script and style elements
-    const scripts = tempDiv.querySelectorAll('script, style');
-    scripts.forEach(script => script.remove());
-    
-    // Get text content and clean up
-    let text = tempDiv.textContent || tempDiv.innerText || '';
-    
-    // Clean up whitespace and normalize
-    text = text.replace(/\s+/g, ' ')  // Multiple spaces to single space
-              .replace(/\n\s*\n/g, '\n')  // Multiple newlines to single
-              .trim();
-    
-    return text;
+    try {
+      return convert(html, {
+        wordwrap: false,
+        preserveNewlines: true,
+        selectors: [
+          // Remove script and style content
+          { selector: 'script', format: 'skip' },
+          { selector: 'style', format: 'skip' },
+          // Keep important elements
+          { selector: 'p', options: { leadingLineBreaks: 1, trailingLineBreaks: 1 } },
+          { selector: 'br', format: 'lineBreak' },
+          { selector: 'div', options: { leadingLineBreaks: 1, trailingLineBreaks: 1 } },
+        ]
+      }).trim();
+    } catch (error) {
+      console.error('Error converting HTML to text:', error);
+      // Fallback to simple DOM parsing
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = html;
+      const scripts = tempDiv.querySelectorAll('script, style');
+      scripts.forEach(script => script.remove());
+      return (tempDiv.textContent || tempDiv.innerText || '').trim();
+    }
   }
 
   // Check if email is likely a transaction notification
@@ -381,6 +346,14 @@ class EmailParsingService {
       from 
     });
 
+    // Debug: Test each pattern individually
+    console.log('🔍 Pattern Testing:');
+    console.log('- Amount Debited pattern:', /amount\s+debited/i.test(bodyText));
+    console.log('- INR Amount pattern:', /inr\s+\d+(?:,\d+)*(?:\.\d+)?/i.test(bodyText));
+    console.log('- Account Number pattern:', /account\s+number:\s*[x]+\d+/i.test(bodyText));
+    console.log('- XX Account pattern:', /xx\d{4}/i.test(bodyText));
+    console.log('- Axis Bank pattern:', /axis/i.test(from));
+
     // 1. Must be from a financial institution
     const isFromBank = Object.values(this.BANK_PATTERNS).some(pattern => pattern.test(from));
     const isFromFinancial = isFromBank || /bank|card|payment|paytm|phonepe|gpay|upi|neft|imps|rtgs/i.test(from);
@@ -391,26 +364,26 @@ class EmailParsingService {
     }
 
     // 2. Must have clear debit/credit indicator (not just "transaction")
-    const hasDebitCredit = /debited|credited|debit|credit|dr\b|cr\b|withdrawn|received|charged|refund/i.test(bodyText) ||
-                          /debited|credited|debit|credit|dr\b|cr\b|withdrawn|received|charged|refund/i.test(subjectText);
+    const hasDebitCredit = /amount\s+debited|amount\s+credited|debited|credited|debit|credit|dr\b|cr\b|withdrawn|received|charged|refund/i.test(bodyText) ||
+                          /amount\s+debited|amount\s+credited|debited|credited|debit|credit|dr\b|cr\b|withdrawn|received|charged|refund/i.test(subjectText);
     
     if (!hasDebitCredit) {
       console.log('❌ No clear debit/credit indicator');
       return false;
     }
 
-    // 3. Must have amount with currency
-    const hasAmount = /(?:rs\.?\s*|₹\s*|inr\s*)\d+(?:,\d+)*(?:\.\d+)?|(?:\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i.test(bodyText) ||
-                     /(?:rs\.?\s*|₹\s*|inr\s*)\d+(?:,\d+)*(?:\.\d+)?|(?:\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i.test(subjectText);
+    // 3. Must have amount with currency (including INR format)
+    const hasAmount = /(?:rs\.?\s*|₹\s*|inr\s+)\d+(?:,\d+)*(?:\.\d+)?|(?:\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i.test(bodyText) ||
+                     /(?:rs\.?\s*|₹\s*|inr\s+)\d+(?:,\d+)*(?:\.\d+)?|(?:\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i.test(subjectText);
     
     if (!hasAmount) {
       console.log('❌ No amount with currency found');
       return false;
     }
 
-    // 4. Must have account indicator (masked account number or card)
-    const hasAccount = /a\/c\s*(?:no\.?)?\s*[*x]+\d+|account\s*(?:no\.?)?\s*[*x]+\d+|card\s*[*x]+\d+|\*{4}\d{4}|xxxx\d{4}/i.test(bodyText) ||
-                      /a\/c\s*(?:no\.?)?\s*[*x]+\d+|account\s*(?:no\.?)?\s*[*x]+\d+|card\s*[*x]+\d+|\*{4}\d{4}|xxxx\d{4}/i.test(subjectText);
+    // 4. Must have account indicator (masked account number or card) - including XX format
+    const hasAccount = /a\/c\s*(?:no\.?)?\s*[*x]+\d+|account\s*(?:no\.?)?\s*[*x]+\d+|account\s+number:\s*[x]+\d+|card\s*[*x]+\d+|\*{4}\d{4}|xxxx\d{4}|xx\d{4}/i.test(bodyText) ||
+                      /a\/c\s*(?:no\.?)?\s*[*x]+\d+|account\s*(?:no\.?)?\s*[*x]+\d+|account\s+number:\s*[x]+\d+|card\s*[*x]+\d+|\*{4}\d{4}|xxxx\d{4}|xx\d{4}/i.test(subjectText);
     
     if (!hasAccount) {
       console.log('❌ No account/card number found');
@@ -455,8 +428,8 @@ class EmailParsingService {
       return null;
     }
 
-    // Extract amount - prioritize body content and ensure it has currency
-    const amountRegex = /(?:rs\.?\s*|₹\s*|inr\s*)(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i;
+    // Extract amount - prioritize body content and ensure it has currency (including INR format)
+    const amountRegex = /(?:rs\.?\s*|₹\s*|inr\s+)(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i;
     let amountMatch = bodyText.match(amountRegex);
     if (!amountMatch) {
       amountMatch = subject.match(amountRegex);
@@ -468,13 +441,13 @@ class EmailParsingService {
       return null;
     }
 
-    // Extract account info - must have masked account number
-    const accountRegex = /(?:a\/c\s*(?:no\.?)?\s*|account\s*(?:no\.?)?\s*|card\s*)?([*x]+\d{4,}|\*{4}\d{4}|xxxx\d{4})/i;
+    // Extract account info - must have masked account number (including XX format)
+    const accountRegex = /(?:a\/c\s*(?:no\.?)?\s*|account\s*(?:no\.?)?\s*|account\s+number:\s*|card\s*)?([*x]+\d{4,}|\*{4}\d{4}|xxxx\d{4}|xx\d{4})/i;
     let accountMatch = bodyText.match(accountRegex);
     if (!accountMatch) {
       accountMatch = subject.match(accountRegex);
     }
-    const accountPartial = accountMatch ? accountMatch[1].replace(/[*x]/g, '').slice(-4) : undefined;
+    const accountPartial = accountMatch ? accountMatch[1].replace(/[*x]/gi, '').slice(-4) : undefined;
     
     if (!accountPartial) {
       console.log('Skipping email - no account number found:', subject);
