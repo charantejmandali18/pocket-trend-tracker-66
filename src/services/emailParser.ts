@@ -1,5 +1,6 @@
 import { gmailOAuthService } from './gmailOAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { simpleParser } from 'mailparser';
 
 // Types for parsed data
 export interface ParsedTransaction {
@@ -214,10 +215,10 @@ class EmailParsingService {
       const from = headers.find((h: any) => h.name.toLowerCase() === 'from')?.value || '';
       const date = headers.find((h: any) => h.name.toLowerCase() === 'date')?.value || '';
 
-      // Extract email body
-      const body = this.extractEmailBody(message.payload);
+      // Extract email body using simpleParser
+      const body = await this.extractEmailBody(message.payload);
       
-      console.log('Parsing email:', { 
+      console.log('Parsing email with simpleParser:', { 
         subject, 
         from, 
         bodyLength: body.length,
@@ -245,8 +246,55 @@ class EmailParsingService {
     return result;
   }
 
-  // Extract email body from Gmail API response (browser-safe base64 decoding)
-  private extractEmailBody(payload: any): string {
+  // Extract email body using simpleParser for better MIME handling
+  private async extractEmailBody(payload: any): Promise<string> {
+    try {
+      // First try to get the raw MIME content if available
+      const rawContent = this.extractRawContent(payload);
+      
+      if (rawContent) {
+        // Use simpleParser to parse the raw MIME content
+        const parsed = await simpleParser(rawContent);
+        return parsed.text || parsed.textAsHtml || '';
+      }
+      
+      // Fallback to manual extraction if no raw content
+      return this.extractBodyFallback(payload);
+      
+    } catch (error) {
+      console.error('Error parsing email with simpleParser:', error);
+      // Fallback to manual extraction
+      return this.extractBodyFallback(payload);
+    }
+  }
+
+  // Extract raw MIME content from Gmail payload
+  private extractRawContent(payload: any): Buffer | null {
+    try {
+      let rawData = '';
+      
+      // Handle single part message
+      if (payload.body?.data) {
+        rawData = this.decodeBase64(payload.body.data);
+      } 
+      // Handle multi-part message - reconstruct MIME
+      else if (payload.parts) {
+        for (const part of payload.parts) {
+          if (part.body?.data) {
+            rawData += this.decodeBase64(part.body.data) + '\n';
+          }
+        }
+      }
+      
+      return rawData ? Buffer.from(rawData, 'utf-8') : null;
+    } catch (error) {
+      console.error('Error extracting raw content:', error);
+      return null;
+    }
+  }
+
+  // Fallback method for manual body extraction
+  private extractBodyFallback(payload: any): string {
     let body = '';
     let htmlBody = '';
     let textBody = '';
