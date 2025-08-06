@@ -390,12 +390,29 @@ class EmailParsingService {
       return false;
     }
 
-    // 5. Exclude promotional/offer emails
-    const isPromotional = /offer|discount|cashback\s+offer|reward|points|bonus|win|prize|congratulations|limited\s+time|exclusive/i.test(bodyText) ||
-                         /offer|discount|cashback\s+offer|reward|points|bonus|win|prize|congratulations|limited\s+time|exclusive/i.test(subjectText);
+    // 5. Exclude promotional/offer emails (but allow transaction-related terms)
+    const promotionalPatterns = [
+      /special\s+offer/i,
+      /limited\s+time\s+offer/i,
+      /discount\s+offer/i,
+      /cashback\s+offer/i,
+      /bonus\s+points/i,
+      /win\s+prizes?/i,
+      /congratulations.*won/i,
+      /exclusive\s+deal/i,
+      /claim\s+your\s+reward/i
+    ];
     
+    const isPromotional = promotionalPatterns.some(pattern => 
+      pattern.test(bodyText) || pattern.test(subjectText)
+    );
+    
+    // Debug: Show which promotional pattern matched (if any)
     if (isPromotional) {
-      console.log('❌ Detected as promotional email');
+      const matchedPattern = promotionalPatterns.find(pattern => 
+        pattern.test(bodyText) || pattern.test(subjectText)
+      );
+      console.log('❌ Detected as promotional email - Pattern:', matchedPattern?.source);
       return false;
     }
 
@@ -502,7 +519,16 @@ class EmailParsingService {
     if (accountPartial && accountPartial.length === 4) confidence += 0.3; // Valid account number
     if (transactionType !== 'unknown') confidence += 0.1; // Transaction type confirmed
     
-    console.log(`Transaction confidence: ${confidence} (bank: ${!!bankName}, amount: ${amount}, account: ${accountPartial}, type: ${transactionType})`);
+    console.log('📊 Extracted Transaction Data:', {
+      transactionType,
+      amount,
+      currency: 'INR',
+      accountPartial,
+      bankName,
+      description: description.substring(0, 50) + '...',
+      confidence,
+      merchant: description !== subject ? description.substring(0, 30) + '...' : 'None'
+    });
     
     return {
       id: `parsed_${emailId}_${Date.now()}`,
