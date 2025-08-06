@@ -636,36 +636,137 @@ class GmailOAuthService {
     }>
   ): Promise<boolean> {
     try {
+      console.log(`🔍 Processing ${accounts.length} credit report accounts for user:`, userId);
+      
       // Create or get a special integration ID for credit reports
       const creditReportIntegrationId = await this.getOrCreateCreditReportIntegration(userId);
+      console.log('📧 Using credit report integration ID:', creditReportIntegrationId);
       
-      const accountsToInsert = accounts.map(account => ({
-        user_id: userId,
-        email_integration_id: creditReportIntegrationId,
-        discovered_from_email_id: `credit-report-${Date.now()}`, // Placeholder email ID for credit reports
-        bank_name: account.bank_name,
-        account_type: account.account_type,
-        current_balance: account.balance,
-        account_number_partial: account.account_number_partial,
-        confidence_score: account.confidence_score,
-        needs_review: account.confidence_score < 0.8,
-        status: 'pending' as const
-      }));
+      const accountsToInsert = [];
+      const accountsToUpdate = [];
+      
+      // Check each account for duplicates before inserting
+      for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
+        console.log(`🏦 Processing account ${i + 1}/${accounts.length}:`, {
+          bank_name: account.bank_name,
+          account_type: account.account_type,
+          account_number_partial: account.account_number_partial,
+          confidence_score: account.confidence_score
+        });
+        const accountNumberPartial = account.account_number_partial || 'unknown';
+        
+        // Check for any existing account (including rejected ones)
+        const { data: existingAccounts, error: checkError } = await supabase
+          .from('discovered_accounts')
+          .select('id, status')
+          .eq('email_integration_id', creditReportIntegrationId)
+          .eq('bank_name', account.bank_name)
+          .eq('account_number_partial', accountNumberPartial)
+          .limit(1);
 
-      const { error } = await supabase
-        .from('discovered_accounts')
-        .insert(accountsToInsert);
+        if (checkError) {
+          console.warn('Error checking for duplicate discovered account:', checkError);
+          continue;
+        }
 
-      if (error) {
-        console.error('Error inserting credit report accounts:', error);
-        throw error;
+        if (!existingAccounts || existingAccounts.length === 0) {
+          // No existing account, create new one
+          accountsToInsert.push({
+            user_id: userId,
+            email_integration_id: creditReportIntegrationId,
+            discovered_from_email_id: `credit-report-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            bank_name: account.bank_name,
+            account_type: account.account_type,
+            current_balance: account.balance,
+            account_number_partial: accountNumberPartial,
+            confidence_score: account.confidence_score,
+            needs_review: account.confidence_score < 0.8,
+            status: 'pending' as const
+          });
+          console.log('✅ New account to be inserted:', account.bank_name);
+        } else {
+          const existingAccount = existingAccounts[0];
+          if (existingAccount.status === 'rejected') {
+            // Update rejected account back to pending
+            accountsToUpdate.push({
+              id: existingAccount.id,
+              current_balance: account.balance,
+              confidence_score: account.confidence_score,
+              needs_review: account.confidence_score < 0.8,
+              status: 'pending' as const,
+              updated_at: new Date().toISOString()
+            });
+            console.log('🔄 Rejected account to be updated back to pending:', account.bank_name);
+          } else {
+            console.log('⏭️ Account already exists with status:', existingAccount.status, '-', account.bank_name);
+          }
+        }
       }
 
-      console.log(`Successfully added ${accounts.length} credit report accounts`);
+      let insertedCount = 0;
+      let updatedCount = 0;
+
+      // Insert new accounts
+      if (accountsToInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from('discovered_accounts')
+          .insert(accountsToInsert);
+
+        if (insertError) {
+          console.error('Error inserting credit report accounts:', insertError);
+          throw insertError;
+        }
+        insertedCount = accountsToInsert.length;
+        console.log(`✅ Successfully inserted ${insertedCount} new accounts`);
+      }
+
+      // Update rejected accounts back to pending
+      if (accountsToUpdate.length > 0) {
+        for (const updateData of accountsToUpdate) {
+          const { id, ...updates } = updateData;
+          const { error: updateError } = await supabase
+            .from('discovered_accounts')
+            .update(updates)
+            .eq('id', id);
+
+          if (updateError) {
+            console.error('Error updating rejected account:', updateError);
+          } else {
+            updatedCount++;
+          }
+        }
+        console.log(`🔄 Successfully updated ${updatedCount} rejected accounts back to pending`);
+      }
+
+      if (insertedCount === 0 && updatedCount === 0) {
+        console.log('All credit report accounts already exist with active status');
+      }
+
+      console.log(`Successfully processed ${accounts.length} credit report accounts`);
       return true;
     } catch (error) {
       console.error('Error adding credit report accounts:', error);
       return false;
+    }
+  }
+
+  // Debug function to check discovered accounts
+  async getDiscoveredAccounts(userId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('discovered_accounts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      console.log(`Found ${data?.length || 0} discovered accounts for user:`, data);
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching discovered accounts:', error);
+      return [];
     }
   }
 }

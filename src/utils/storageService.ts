@@ -33,10 +33,16 @@ class StorageService {
     return this.useLocalStorage ? LocalStorage.getStoredTransactions() : await SupabaseStorage.getStoredTransactions();
   }
 
-  async addStoredTransaction(transaction: any) {
+  async addStoredTransaction(transaction: any, skipBalanceUpdate = false) {
     return this.useLocalStorage 
       ? LocalStorage.addStoredTransaction(transaction)
-      : await SupabaseStorage.addStoredTransaction(transaction);
+      : await SupabaseStorage.addStoredTransaction(transaction, skipBalanceUpdate);
+  }
+
+  async addStoredTransactionsBatch(transactions: any[]) {
+    return this.useLocalStorage
+      ? Promise.all(transactions.map(t => LocalStorage.addStoredTransaction(t)))
+      : await SupabaseStorage.addStoredTransactionsBatch(transactions);
   }
 
   async updateStoredTransaction(id: string, updates: any) {
@@ -243,7 +249,9 @@ export const storageService = new StorageService();
 
 // Export individual methods for easier importing (bound to the service instance)
 export const getStoredTransactions = storageService.getStoredTransactions.bind(storageService);
-export const addStoredTransaction = storageService.addStoredTransaction.bind(storageService);
+export const addStoredTransaction = (transaction: any, skipBalanceUpdate = false) => 
+  storageService.addStoredTransaction(transaction, skipBalanceUpdate);
+export const addStoredTransactionsBatch = storageService.addStoredTransactionsBatch.bind(storageService);
 export const updateStoredTransaction = storageService.updateStoredTransaction.bind(storageService);
 export const deleteStoredTransaction = storageService.deleteStoredTransaction.bind(storageService);
 export const getStoredCategories = storageService.getStoredCategories.bind(storageService);

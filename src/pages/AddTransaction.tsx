@@ -451,7 +451,7 @@ const AddTransaction = () => {
         member_email: user.email || ''
       };
 
-      const result = await addStoredTransaction(newTransaction);
+      const result = await addStoredTransaction(newTransaction, true); // Skip balance update since we handle it manually
 
       if (!result) {
         // If transaction creation failed, we should rollback the account balance

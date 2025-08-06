@@ -78,8 +78,27 @@ export const getStoredTransactions = (): StoredTransaction[] => {
   }
 };
 
-export const addStoredTransaction = (transaction: Omit<StoredTransaction, 'id' | 'created_at'>): StoredTransaction => {
+export const addStoredTransaction = (transaction: Omit<StoredTransaction, 'id' | 'created_at'>): StoredTransaction | null => {
   const transactions = getStoredTransactions();
+  
+  // Check for duplicates
+  const isDuplicate = transactions.some(existing => 
+    existing.user_id === transaction.user_id &&
+    existing.amount === transaction.amount &&
+    existing.transaction_date === transaction.transaction_date &&
+    existing.description === transaction.description &&
+    existing.account_name === transaction.account_name
+  );
+  
+  if (isDuplicate) {
+    console.log('Duplicate transaction detected in localStorage, skipping insertion:', {
+      amount: transaction.amount,
+      date: transaction.transaction_date,
+      description: transaction.description
+    });
+    return null;
+  }
+  
   const newTransaction: StoredTransaction = {
     ...transaction,
     id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,

@@ -12,7 +12,7 @@ class EmailParsingService {
   // Optimized email search queries - more specific and fewer calls
   private readonly SEARCH_QUERIES = [
     // Combined bank and payment notifications (last 30 days)
-    'newer_than:30d AND ((from:(*bank* OR *sbi* OR *hdfc* OR *icici* OR *axis* OR *kotak* OR *paytm* OR *phonepe* OR *gpay*) AND (debited OR credited OR transaction OR payment)) OR (subject:(transaction OR payment OR debited OR credited)))',
+    'newer_than:30d AND ((from:(*bank* OR *sbi* OR *hdfc* OR *icici* OR *axis* OR *kotak* OR *paytm* OR *phonepe* OR *gpay* OR *harsha*) AND (debited OR credited OR transaction OR payment OR deposit)) OR (subject:(transaction OR payment OR debited OR credited OR deposit)))',
     
     // Credit card and EMI notifications (last 30 days)  
     'newer_than:30d AND (from:(*card* OR *visa* OR *mastercard* OR *amex* OR *finance* OR *loan*) AND (payment OR transaction OR statement OR emi OR installment))',
@@ -141,28 +141,15 @@ class EmailParsingService {
       // Extract email body using improved HTML-to-text conversion
       const body = this.extractEmailBody(message.payload);
       
-      console.log('🔍 Processing email with bank-specific parsers:', { 
-        subject: subject.substring(0, 100), 
-        from, 
-        bodyLength: body.length,
-        supportedBanks: BankParserFactory.getSupportedBanks()
-      });
 
-      // Log the full email body for debugging
-      console.log('📧 Full Email Body Content:');
-      console.log('================================');
-      console.log(body);
-      console.log('================================');
 
       // 1. Find the appropriate bank parser
       const bankParser = BankParserFactory.getParserForEmail(subject, body, from);
       
       if (!bankParser) {
-        console.log('❌ No bank parser found for this email - skipping');
         return result;
       }
 
-      console.log(`🏦 Using ${bankParser.getBankName()} parser`);
 
       // 2. Use bank-specific parser to extract transaction and account data
       const parseResult = bankParser.parseEmail(message.id, subject, from, date, body);
@@ -170,15 +157,11 @@ class EmailParsingService {
       if (parseResult) {
         if (parseResult.transaction) {
           result.transaction = parseResult.transaction;
-          console.log('✅ Transaction parsed successfully');
         }
         
         if (parseResult.account) {
           result.account = parseResult.account;
-          console.log('✅ Account discovered successfully');
         }
-      } else {
-        console.log('❌ Bank parser returned no results');
       }
 
     } catch (error) {

@@ -293,35 +293,12 @@ const Transactions = () => {
     if (!editingTransaction) return;
 
     try {
-      const originalTransaction = editingTransaction;
       const newAmount = parseFloat(editForm.amount);
       const newTransactionType = editForm.transaction_type as 'credit' | 'debit';
       const newAccountName = editForm.account_name;
 
-      // Check if balance-affecting fields changed
-      const amountChanged = originalTransaction.amount !== newAmount;
-      const typeChanged = originalTransaction.transaction_type !== newTransactionType;
-      const accountChanged = originalTransaction.account_name !== newAccountName;
-
-      if (amountChanged || typeChanged || accountChanged) {
-        // Reverse the original transaction's effect if it had an account
-        if (originalTransaction.account_name) {
-          await updateAccountBalance(
-            originalTransaction.account_name,
-            originalTransaction.amount,
-            originalTransaction.transaction_type === 'debit' ? 'credit' : 'debit'
-          );
-        }
-
-        // Apply the new transaction's effect if it has an account
-        if (newAccountName) {
-          await updateAccountBalance(
-            newAccountName,
-            newAmount,
-            newTransactionType
-          );
-        }
-      }
+      // Balance updates are now handled automatically by updateStoredTransaction in supabaseDataStorage.ts
+      // No manual balance update logic needed for transaction edits
 
       const updates = {
         description: editForm.description,
@@ -339,7 +316,7 @@ const Transactions = () => {
       if (success) {
         toast({
           title: "Success",
-          description: "Transaction updated successfully and account balances updated",
+          description: "Transaction updated successfully",
         });
         setShowEditDialog(false);
         setEditingTransaction(null);
@@ -361,24 +338,15 @@ const Transactions = () => {
 
   const handleDelete = async (transactionId: string) => {
     try {
-      // Find the transaction to get its details for balance reversal
-      const transactionToDelete = transactions.find(t => t.id === transactionId);
-      
-      // Reverse the transaction's effect on the account balance if it has an account
-      if (transactionToDelete && transactionToDelete.account_name) {
-        await updateAccountBalance(
-          transactionToDelete.account_name,
-          transactionToDelete.amount,
-          transactionToDelete.transaction_type === 'debit' ? 'credit' : 'debit'
-        );
-      }
+      // Balance updates are now handled automatically by deleteStoredTransaction in supabaseDataStorage.ts
+      // No manual balance update logic needed for transaction deletes
 
       const success = await deleteStoredTransaction(transactionId);
       
       if (success) {
         toast({
           title: "Success",
-          description: "Transaction deleted successfully and account balance updated",
+          description: "Transaction deleted successfully",
         });
         fetchTransactions();
         fetchAccounts(); // Refresh accounts to show updated balances
@@ -417,7 +385,7 @@ const Transactions = () => {
       };
 
       // Save to transactions table using storage service
-      const success = await addStoredTransaction(transactionData);
+      const success = await addStoredTransaction(transactionData, true); // Skip balance update since we handle it manually
       
       if (success) {
         // Update account balance if applicable

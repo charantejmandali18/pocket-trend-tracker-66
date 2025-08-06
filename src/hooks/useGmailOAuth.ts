@@ -473,6 +473,10 @@ export const useGmailOAuth = () => {
     resetSyncTime,
     processAccount,
     addCreditReportAccounts,
+    getDiscoveredAccounts: async () => {
+      if (!user) return [];
+      return await gmailOAuthService.getDiscoveredAccounts(user.id);
+    },
     refreshData: () => {
       loadEmailIntegrations();
       loadUnprocessedAccounts();
