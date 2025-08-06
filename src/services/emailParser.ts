@@ -1,90 +1,13 @@
 import { gmailOAuthService } from './gmailOAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { convert } from 'html-to-text';
+import { BankParserFactory } from './bankParsers/BankParserFactory';
+import type { ParsedTransaction, ParsedAccount } from './bankParsers/BankParserInterface';
 
-// Types for parsed data
-export interface ParsedTransaction {
-  id: string;
-  raw_email_id: string;
-  email_subject: string;
-  email_date: string;
-  sender: string;
-  
-  // Transaction details
-  transaction_type: 'credit' | 'debit' | 'unknown';
-  amount: number;
-  currency: string;
-  transaction_date: string;
-  description: string;
-  merchant?: string;
-  category?: string;
-  
-  // Account information
-  account_info: {
-    bank_name?: string;
-    account_number_partial?: string;
-    account_type?: string;
-  };
-  
-  // Processing metadata
-  confidence_score: number;
-  needs_review: boolean;
-  parsing_notes?: string;
-}
-
-export interface ParsedAccount {
-  id: string;
-  discovered_from_email_id: string;
-  bank_name: string;
-  account_number_partial?: string;
-  account_type?: string;
-  current_balance?: number;
-  account_holder_name?: string;
-  confidence_score: number;
-  needs_review: boolean;
-  discovery_notes?: string;
-}
+// Re-export types for compatibility
+export type { ParsedTransaction, ParsedAccount } from './bankParsers/BankParserInterface';
 
 class EmailParsingService {
-  // Bank and financial service patterns
-  private readonly BANK_PATTERNS = {
-    // Major Indian Banks
-    sbi: /state bank|sbi|sbicard/i,
-    hdfc: /hdfc|hdfcbank/i,
-    icici: /icici|icicbank/i,
-    axis: /axis|axisbank/i,
-    kotak: /kotak|kotakbank/i,
-    pnb: /punjab national|pnb/i,
-    bob: /bank of baroda|bob/i,
-    canara: /canara bank/i,
-    union: /union bank/i,
-    indian: /indian bank/i,
-    
-    // Payment services
-    paytm: /paytm/i,
-    phonepe: /phonepe/i,
-    googlepay: /google pay|gpay/i,
-    amazonpay: /amazon pay/i,
-    
-    // Credit cards
-    amex: /american express|amex/i,
-    visa: /visa/i,
-    mastercard: /mastercard/i,
-  };
-
-  // Transaction keywords and patterns
-  private readonly TRANSACTION_PATTERNS = {
-    // Debit patterns
-    debit: /debited|debit|withdrawn|purchase|spent|paid|dr\b|charged/i,
-    // Credit patterns  
-    credit: /credited|credit|received|deposit|refund|cr\b|cashback/i,
-    // Amount patterns
-    amount: /(?:rs\.?\s*|₹\s*|inr\s*)?([\d,]+\.?\d*)/i,
-    // Account patterns
-    account: /a\/c\s*(?:no\.?)?\s*[\*x]*(\d{4,})|account\s*(?:no\.?)?\s*[\*x]*(\d{4,})/i,
-    // Date patterns
-    date: /(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{1,2}\s+\w+\s+\d{2,4})/i,
-  };
 
   // Optimized email search queries - more specific and fewer calls
   private readonly SEARCH_QUERIES = [
@@ -201,7 +124,7 @@ class EmailParsingService {
     }
   }
 
-  // Parse individual email message
+  // Parse individual email message using bank-specific parsers
   private async parseEmailMessage(message: any): Promise<{
     transaction?: ParsedTransaction;
     account?: ParsedAccount;
@@ -218,11 +141,11 @@ class EmailParsingService {
       // Extract email body using improved HTML-to-text conversion
       const body = this.extractEmailBody(message.payload);
       
-      console.log('Parsing email with html-to-text:', { 
-        subject, 
+      console.log('🔍 Processing email with bank-specific parsers:', { 
+        subject: subject.substring(0, 100), 
         from, 
         bodyLength: body.length,
-        bodyPreview: body.substring(0, 200) + '...' // First 200 chars of body for debugging
+        supportedBanks: BankParserFactory.getSupportedBanks()
       });
 
       // Log the full email body for debugging
@@ -231,18 +154,31 @@ class EmailParsingService {
       console.log(body);
       console.log('================================');
 
-      // Parse transaction if this looks like a transaction email
-      if (this.isTransactionEmail(subject, body, from)) {
-        const transaction = this.parseTransaction(message.id, subject, from, date, body);
-        if (transaction) {
-          result.transaction = transaction;
-        }
+      // 1. Find the appropriate bank parser
+      const bankParser = BankParserFactory.getParserForEmail(subject, body, from);
+      
+      if (!bankParser) {
+        console.log('❌ No bank parser found for this email - skipping');
+        return result;
       }
 
-      // Parse account information if discoverable
-      const accountInfo = this.parseAccountInfo(message.id, subject, from, body);
-      if (accountInfo) {
-        result.account = accountInfo;
+      console.log(`🏦 Using ${bankParser.getBankName()} parser`);
+
+      // 2. Use bank-specific parser to extract transaction and account data
+      const parseResult = bankParser.parseEmail(message.id, subject, from, date, body);
+      
+      if (parseResult) {
+        if (parseResult.transaction) {
+          result.transaction = parseResult.transaction;
+          console.log('✅ Transaction parsed successfully');
+        }
+        
+        if (parseResult.account) {
+          result.account = parseResult.account;
+          console.log('✅ Account discovered successfully');
+        }
+      } else {
+        console.log('❌ Bank parser returned no results');
       }
 
     } catch (error) {
@@ -334,388 +270,11 @@ class EmailParsingService {
     }
   }
 
-  // Check if email is likely a transaction notification
-  private isTransactionEmail(subject: string, body: string, from: string): boolean {
-    // STRICT validation - must have ALL three: debit/credit + amount + account
-    const bodyText = body.toLowerCase();
-    const subjectText = subject.toLowerCase();
-    
-    console.log('Validating transaction email:', { 
-      subject: subject.substring(0, 100),
-      bodyPreview: bodyText.substring(0, 200),
-      from 
-    });
 
-    // Debug: Test each pattern individually
-    console.log('🔍 Pattern Testing:');
-    console.log('- Amount Debited pattern:', /amount\s+debited/i.test(bodyText));
-    console.log('- INR Amount pattern:', /inr\s+\d+(?:,\d+)*(?:\.\d+)?/i.test(bodyText));
-    console.log('- Account Number pattern:', /account\s+number:\s*[x]+\d+/i.test(bodyText));
-    console.log('- XX Account pattern:', /xx\d{4}/i.test(bodyText));
-    console.log('- Axis Bank pattern:', /axis/i.test(from));
 
-    // 1. Must be from a financial institution
-    const isFromBank = Object.values(this.BANK_PATTERNS).some(pattern => pattern.test(from));
-    const isFromFinancial = isFromBank || /bank|card|payment|paytm|phonepe|gpay|upi|neft|imps|rtgs/i.test(from);
-    
-    if (!isFromFinancial) {
-      console.log('❌ Not from financial institution');
-      return false;
-    }
 
-    // 2. Must have clear debit/credit indicator (not just "transaction")
-    const hasDebitCredit = /amount\s+debited|amount\s+credited|debited|credited|debit|credit|dr\b|cr\b|withdrawn|received|charged|refund/i.test(bodyText) ||
-                          /amount\s+debited|amount\s+credited|debited|credited|debit|credit|dr\b|cr\b|withdrawn|received|charged|refund/i.test(subjectText);
-    
-    if (!hasDebitCredit) {
-      console.log('❌ No clear debit/credit indicator');
-      return false;
-    }
 
-    // 3. Must have amount with currency (including INR format)
-    const hasAmount = /(?:rs\.?\s*|₹\s*|inr\s+)\d+(?:,\d+)*(?:\.\d+)?|(?:\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i.test(bodyText) ||
-                     /(?:rs\.?\s*|₹\s*|inr\s+)\d+(?:,\d+)*(?:\.\d+)?|(?:\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i.test(subjectText);
-    
-    if (!hasAmount) {
-      console.log('❌ No amount with currency found');
-      return false;
-    }
 
-    // 4. Must have account indicator (masked account number or card) - including XX format
-    const hasAccount = /a\/c\s*(?:no\.?)?\s*[*x]+\d+|account\s*(?:no\.?)?\s*[*x]+\d+|account\s+number:\s*[x]+\d+|card\s*[*x]+\d+|\*{4}\d{4}|xxxx\d{4}|xx\d{4}/i.test(bodyText) ||
-                      /a\/c\s*(?:no\.?)?\s*[*x]+\d+|account\s*(?:no\.?)?\s*[*x]+\d+|account\s+number:\s*[x]+\d+|card\s*[*x]+\d+|\*{4}\d{4}|xxxx\d{4}|xx\d{4}/i.test(subjectText);
-    
-    if (!hasAccount) {
-      console.log('❌ No account/card number found');
-      return false;
-    }
-
-    // 5. Exclude promotional/offer emails (but allow transaction-related terms)
-    const promotionalPatterns = [
-      /special\s+offer/i,
-      /limited\s+time\s+offer/i,
-      /discount\s+offer/i,
-      /cashback\s+offer/i,
-      /bonus\s+points/i,
-      /win\s+prizes?/i,
-      /congratulations.*won/i,
-      /exclusive\s+deal/i,
-      /claim\s+your\s+reward/i
-    ];
-    
-    const isPromotional = promotionalPatterns.some(pattern => 
-      pattern.test(bodyText) || pattern.test(subjectText)
-    );
-    
-    // Debug: Show which promotional pattern matched (if any)
-    if (isPromotional) {
-      const matchedPattern = promotionalPatterns.find(pattern => 
-        pattern.test(bodyText) || pattern.test(subjectText)
-      );
-      console.log('❌ Detected as promotional email - Pattern:', matchedPattern?.source);
-      return false;
-    }
-
-    console.log('✅ Valid transaction email detected');
-    return true;
-  }
-
-  // Parse transaction details from email
-  private parseTransaction(emailId: string, subject: string, from: string, date: string, body: string): ParsedTransaction | null {
-    // Prioritize body content for parsing, use subject as fallback
-    const bodyText = body;
-    const fullText = `${body} ${subject}`; // Body first, then subject
-    
-    // Determine transaction type - MUST be clearly debit or credit
-    // Check body first, then subject
-    let transactionType: 'credit' | 'debit' | 'unknown' = 'unknown';
-    if (this.TRANSACTION_PATTERNS.debit.test(bodyText)) {
-      transactionType = 'debit';
-    } else if (this.TRANSACTION_PATTERNS.credit.test(bodyText)) {
-      transactionType = 'credit';
-    } else if (this.TRANSACTION_PATTERNS.debit.test(subject)) {
-      transactionType = 'debit';
-    } else if (this.TRANSACTION_PATTERNS.credit.test(subject)) {
-      transactionType = 'credit';
-    }
-    
-    // If we can't determine if it's debit or credit, don't process it as a transaction
-    if (transactionType === 'unknown') {
-      console.log('Skipping email - not clearly debit or credit:', subject);
-      return null;
-    }
-
-    // Extract amount - prioritize body content and ensure it has currency (including INR format)
-    const amountRegex = /(?:rs\.?\s*|₹\s*|inr\s+)(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:rs\.?|₹|inr)/i;
-    let amountMatch = bodyText.match(amountRegex);
-    if (!amountMatch) {
-      amountMatch = subject.match(amountRegex);
-    }
-    const amount = amountMatch ? parseFloat((amountMatch[1] || amountMatch[2]).replace(/,/g, '')) : 0;
-    
-    if (amount <= 0) {
-      console.log('Skipping email - no valid amount found:', subject);
-      return null;
-    }
-
-    // Extract account info - must have masked account number (including XX format)
-    const accountRegex = /(?:a\/c\s*(?:no\.?)?\s*|account\s*(?:no\.?)?\s*|account\s+number:\s*|card\s*)?([*x]+\d{4,}|\*{4}\d{4}|xxxx\d{4}|xx\d{4})/i;
-    let accountMatch = bodyText.match(accountRegex);
-    if (!accountMatch) {
-      accountMatch = subject.match(accountRegex);
-    }
-    const accountPartial = accountMatch ? accountMatch[1].replace(/[*x]/gi, '').slice(-4) : undefined;
-    
-    if (!accountPartial) {
-      console.log('Skipping email - no account number found:', subject);
-      return null;
-    }
-
-    // Determine bank - check sender first, then body, then subject
-    let bankName = '';
-    for (const [bank, pattern] of Object.entries(this.BANK_PATTERNS)) {
-      if (pattern.test(from) || pattern.test(bodyText) || pattern.test(subject)) {
-        bankName = bank.toUpperCase();
-        break;
-      }
-    }
-
-    // Extract merchant/description - prioritize UPI transaction info
-    let description = subject; // Default to subject
-    let merchant = undefined;
-    
-    // First, try to extract UPI transaction info (most reliable for merchant info)
-    const upiPattern = /transaction\s+info:\s*(upi\/[^\s\n]+\/[^\s\n\/]+\/([^\s\n\/]+))/i;
-    let upiMatch = bodyText.match(upiPattern);
-    if (!upiMatch) {
-      upiMatch = subject.match(upiPattern);
-    }
-    
-    console.log('🔍 UPI Pattern Debug:', {
-      patternFound: !!upiMatch,
-      fullMatch: upiMatch?.[0],
-      upiString: upiMatch?.[1], 
-      merchantName: upiMatch?.[2]
-    });
-    
-    if (upiMatch) {
-      description = upiMatch[1].trim(); // Full UPI transaction info
-      merchant = upiMatch[2].trim(); // Just the merchant name
-      console.log('🏪 Extracted UPI info:', { description, merchant });
-    } else {
-      // Try alternative UPI patterns (case insensitive, more flexible)
-      const alternativeUpiPatterns = [
-        /upi\/p2m\/\d+\/([^\/\s\n]+)/i,  // UPI/P2M/123456/MERCHANT
-        /upi\/p2a\/\d+\/([^\/\s\n]+)/i,  // UPI/P2A/123456/MERCHANT  
-        /upi\/[^\/]+\/\d+\/([^\/\s\n]+)/i  // UPI/*/123456/MERCHANT
-      ];
-      
-      let foundAlternative = false;
-      for (const pattern of alternativeUpiPatterns) {
-        const match = bodyText.match(pattern);
-        if (match) {
-          // Find the full UPI string by looking for the context around the match
-          const fullUpiMatch = bodyText.match(new RegExp(`(upi\/[^\\s\\n]+\/[^\\s\\n\/]+\/${match[1]})`, 'i'));
-          if (fullUpiMatch) {
-            description = fullUpiMatch[1].trim();
-            merchant = match[1].trim();
-            foundAlternative = true;
-            console.log('🏪 Alternative UPI pattern found:', { description, merchant });
-            break;
-          }
-        }
-      }
-      
-      if (!foundAlternative) {
-        // Fallback to other merchant patterns
-        const merchantPatterns = [
-          /(?:at|to)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-          /merchant[:\s]+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-          /transaction\s+(?:at|with)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-          /payment\s+(?:to|at)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-        ];
-        
-        // Try to extract from body
-        for (const pattern of merchantPatterns) {
-          const match = bodyText.match(pattern);
-          if (match && match[1].trim().length > 2) {
-            description = match[1].trim();
-            merchant = match[1].trim();
-            break;
-          }
-        }
-        
-        // If no good match in body, try subject
-        if (description === subject) {
-          for (const pattern of merchantPatterns) {
-            const match = subject.match(pattern);
-            if (match && match[1].trim().length > 2) {
-              description = match[1].trim();
-              merchant = match[1].trim();
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    // Auto-categorize based on description
-    const category = this.categorizeTransaction(description, fullText);
-
-    // Calculate confidence score based on data quality
-    let confidence = 0.1; // Base confidence
-    if (bankName) confidence += 0.3; // Bank name adds high confidence
-    if (amount > 0) confidence += 0.3; // Valid amount adds high confidence
-    if (accountPartial && accountPartial.length === 4) confidence += 0.3; // Valid account number
-    if (transactionType !== 'unknown') confidence += 0.1; // Transaction type confirmed
-    
-    console.log('📊 Extracted Transaction Data:', {
-      transactionType,
-      amount,
-      currency: 'INR',
-      accountPartial,
-      bankName,
-      description: description.length > 50 ? description.substring(0, 50) + '...' : description,
-      merchant: merchant || 'None extracted',
-      confidence
-    });
-    
-    return {
-      id: `parsed_${emailId}_${Date.now()}`,
-      raw_email_id: emailId,
-      email_subject: subject,
-      email_date: date,
-      sender: from,
-      transaction_type: transactionType,
-      amount,
-      currency: 'INR',
-      transaction_date: this.extractTransactionDate(bodyText) || this.extractTransactionDate(subject) || date,
-      description,
-      merchant: merchant,
-      category,
-      account_info: {
-        bank_name: bankName || undefined,
-        account_number_partial: accountPartial,
-        account_type: this.guessAccountType(bodyText) || this.guessAccountType(subject),
-      },
-      confidence_score: confidence,
-      needs_review: confidence < 0.7,
-      parsing_notes: `Auto-parsed from ${from}`
-    };
-  }
-
-  // Parse account information from email
-  private parseAccountInfo(emailId: string, subject: string, from: string, body: string): ParsedAccount | null {
-    // Prioritize body content for account parsing
-    const bodyText = body;
-    const fullText = `${body} ${subject}`; // Body first, then subject
-    
-    // Look for balance information - prioritize body content
-    let balanceMatch = bodyText.match(/(?:balance|bal)[\s:]*(?:rs\.?\s*|₹\s*)?(\d+(?:,\d+)*(?:\.\d+)?)/i);
-    if (!balanceMatch) {
-      balanceMatch = subject.match(/(?:balance|bal)[\s:]*(?:rs\.?\s*|₹\s*)?(\d+(?:,\d+)*(?:\.\d+)?)/i);
-    }
-    const balance = balanceMatch ? parseFloat(balanceMatch[1].replace(/,/g, '')) : undefined;
-    
-    // Only create account if we have meaningful information
-    const hasAccountInBody = this.TRANSACTION_PATTERNS.account.test(bodyText);
-    const hasAccountInSubject = this.TRANSACTION_PATTERNS.account.test(subject);
-    
-    if (!balance && !hasAccountInBody && !hasAccountInSubject) {
-      return null;
-    }
-
-    // Extract account details - prioritize body content
-    let accountMatch = bodyText.match(this.TRANSACTION_PATTERNS.account);
-    if (!accountMatch) {
-      accountMatch = subject.match(this.TRANSACTION_PATTERNS.account);
-    }
-    const accountPartial = accountMatch ? (accountMatch[1] || accountMatch[2]) : undefined;
-
-    // Determine bank - check sender first, then body, then subject
-    let bankName = '';
-    for (const [bank, pattern] of Object.entries(this.BANK_PATTERNS)) {
-      if (pattern.test(from) || pattern.test(bodyText) || pattern.test(subject)) {
-        bankName = bank.toUpperCase();
-        break;
-      }
-    }
-
-    if (!bankName && !accountPartial) {
-      return null;
-    }
-
-    return {
-      id: `account_${emailId}_${Date.now()}`,
-      discovered_from_email_id: emailId,
-      bank_name: bankName,
-      account_number_partial: accountPartial,
-      account_type: this.guessAccountType(bodyText) || this.guessAccountType(subject),
-      current_balance: balance,
-      confidence_score: (bankName ? 0.3 : 0) + (accountPartial ? 0.3 : 0) + (balance ? 0.4 : 0),
-      needs_review: true, // Always require review for auto-discovered accounts
-      discovery_notes: `Discovered from email: ${subject}`
-    };
-  }
-
-  // Guess account type from email content
-  private guessAccountType(text: string): string | undefined {
-    // Be more specific about credit cards - only if explicitly mentioned
-    if (/credit card|cc\s/i.test(text) && !/debit|savings account|current account/i.test(text)) return 'credit_card';
-    
-    // Bank account types
-    if (/savings account|savings|sb account|sb/i.test(text)) return 'savings';
-    if (/current account|current|ca account|ca/i.test(text)) return 'current';
-    
-    // Loan accounts
-    if (/loan account|loan|emi|home loan|personal loan/i.test(text)) return 'loan';
-    
-    // If it mentions "account" but no specific type, default to savings (most common)
-    if (/account/i.test(text) && !/credit card/i.test(text)) return 'savings';
-    
-    return undefined;
-  }
-
-  // Extract transaction date from email content
-  private extractTransactionDate(text: string): string | null {
-    const dateMatch = text.match(this.TRANSACTION_PATTERNS.date);
-    if (dateMatch) {
-      try {
-        const date = new Date(dateMatch[1]);
-        return date.toISOString();
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-
-  // Auto-categorize transactions
-  private categorizeTransaction(description: string, fullText: string): string {
-    const text = `${description} ${fullText}`.toLowerCase();
-    
-    // Category patterns
-    const categories = {
-      'Food & Dining': /restaurant|food|dining|zomato|swiggy|dominos|pizza|cafe|hotel/,
-      'Transportation': /uber|ola|metro|bus|taxi|fuel|petrol|diesel|parking/,
-      'Shopping': /amazon|flipkart|myntra|shopping|mall|store|purchase/,
-      'Utilities': /electricity|water|gas|internet|mobile|recharge|bill/,
-      'Healthcare': /hospital|medical|pharmacy|doctor|medicine|health/,
-      'Entertainment': /movie|cinema|netflix|spotify|entertainment|game/,
-      'Groceries': /grocery|supermarket|vegetables|market|bigbasket/,
-      'Transfer': /transfer|sent|received|family|friend/,
-      'ATM': /atm|cash withdrawal/,
-      'EMI': /emi|loan|installment/,
-    };
-
-    for (const [category, pattern] of Object.entries(categories)) {
-      if (pattern.test(text)) {
-        return category;
-      }
-    }
-
-    return 'Other';
-  }
 
   // Store parsed data with auto-processing for high-confidence transactions
   private async storeParsedDataWithAutoProcessing(
