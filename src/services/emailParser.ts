@@ -485,43 +485,75 @@ class EmailParsingService {
     let merchant = undefined;
     
     // First, try to extract UPI transaction info (most reliable for merchant info)
-    const upiPattern = /transaction\s+info:\s*(upi\/[^:\s]+\/[^\/]+\/([^\/\s]+))/i;
+    const upiPattern = /transaction\s+info:\s*(upi\/[^\s\n]+\/[^\s\n\/]+\/([^\s\n\/]+))/i;
     let upiMatch = bodyText.match(upiPattern);
     if (!upiMatch) {
       upiMatch = subject.match(upiPattern);
     }
+    
+    console.log('🔍 UPI Pattern Debug:', {
+      patternFound: !!upiMatch,
+      fullMatch: upiMatch?.[0],
+      upiString: upiMatch?.[1], 
+      merchantName: upiMatch?.[2]
+    });
     
     if (upiMatch) {
       description = upiMatch[1].trim(); // Full UPI transaction info
       merchant = upiMatch[2].trim(); // Just the merchant name
       console.log('🏪 Extracted UPI info:', { description, merchant });
     } else {
-      // Fallback to other merchant patterns
-      const merchantPatterns = [
-        /(?:at|to)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-        /merchant[:\s]+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-        /transaction\s+(?:at|with)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-        /payment\s+(?:to|at)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+      // Try alternative UPI patterns (case insensitive, more flexible)
+      const alternativeUpiPatterns = [
+        /upi\/p2m\/\d+\/([^\/\s\n]+)/i,  // UPI/P2M/123456/MERCHANT
+        /upi\/p2a\/\d+\/([^\/\s\n]+)/i,  // UPI/P2A/123456/MERCHANT  
+        /upi\/[^\/]+\/\d+\/([^\/\s\n]+)/i  // UPI/*/123456/MERCHANT
       ];
       
-      // Try to extract from body
-      for (const pattern of merchantPatterns) {
+      let foundAlternative = false;
+      for (const pattern of alternativeUpiPatterns) {
         const match = bodyText.match(pattern);
-        if (match && match[1].trim().length > 2) {
-          description = match[1].trim();
-          merchant = match[1].trim();
-          break;
+        if (match) {
+          // Find the full UPI string by looking for the context around the match
+          const fullUpiMatch = bodyText.match(new RegExp(`(upi\/[^\\s\\n]+\/[^\\s\\n\/]+\/${match[1]})`, 'i'));
+          if (fullUpiMatch) {
+            description = fullUpiMatch[1].trim();
+            merchant = match[1].trim();
+            foundAlternative = true;
+            console.log('🏪 Alternative UPI pattern found:', { description, merchant });
+            break;
+          }
         }
       }
       
-      // If no good match in body, try subject
-      if (description === subject) {
+      if (!foundAlternative) {
+        // Fallback to other merchant patterns
+        const merchantPatterns = [
+          /(?:at|to)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+          /merchant[:\s]+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+          /transaction\s+(?:at|with)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+          /payment\s+(?:to|at)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+        ];
+        
+        // Try to extract from body
         for (const pattern of merchantPatterns) {
-          const match = subject.match(pattern);
+          const match = bodyText.match(pattern);
           if (match && match[1].trim().length > 2) {
             description = match[1].trim();
             merchant = match[1].trim();
             break;
+          }
+        }
+        
+        // If no good match in body, try subject
+        if (description === subject) {
+          for (const pattern of merchantPatterns) {
+            const match = subject.match(pattern);
+            if (match && match[1].trim().length > 2) {
+              description = match[1].trim();
+              merchant = match[1].trim();
+              break;
+            }
           }
         }
       }
