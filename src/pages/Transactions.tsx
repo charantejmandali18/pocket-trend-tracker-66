@@ -17,7 +17,11 @@ import {
   Edit2,
   Trash2,
   Plus,
-  X
+  X,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -32,10 +36,12 @@ import {
   getGroupTransactions,
   deleteStoredTransaction,
   updateStoredTransaction,
+  addStoredTransaction,
   getFinancialAccounts,
   updateFinancialAccount,
   type FinancialAccount
 } from '@/utils/storageService';
+import { emailParsingService } from '@/services/emailParser';
 
 type Transaction = Tables<'transactions'> & {
   categories: Tables<'categories'>;
@@ -58,11 +64,13 @@ const Transactions = () => {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
+  const [unprocessedTransactions, setUnprocessedTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  const [showUnprocessed, setShowUnprocessed] = useState(false);
   const [editForm, setEditForm] = useState({
     description: '',
     amount: '',
@@ -87,8 +95,21 @@ const Transactions = () => {
     if (user) {
       fetchTransactions();
       fetchAccounts();
+      fetchUnprocessedTransactions();
     }
   }, [user, isPersonalMode, currentGroup, dataVersion]);
+
+  const fetchUnprocessedTransactions = async () => {
+    if (!user) return;
+
+    try {
+      const unprocessed = await emailParsingService.getUnprocessedTransactions(user.id);
+      console.log('Fetched unprocessed transactions:', unprocessed.length);
+      setUnprocessedTransactions(unprocessed);
+    } catch (error) {
+      console.error('Error fetching unprocessed transactions:', error);
+    }
+  };
 
   const fetchAccounts = async () => {
     if (!user) return;
@@ -357,6 +378,111 @@ const Transactions = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const handleApproveTransaction = async (transaction: any) => {
+    try {
+      console.log('Approving transaction:', transaction);
+      
+      // Create actual transaction from parsed data
+      const transactionData = {
+        description: transaction.description,
+        amount: transaction.amount,
+        transaction_type: transaction.transaction_type,
+        transaction_date: transaction.transaction_date,
+        category_id: categories.find(c => c.name.toLowerCase() === transaction.category?.toLowerCase())?.id || categories[0]?.id,
+        payment_method: 'bank_transfer', // Default payment method for email transactions
+        account_name: transaction.bank_name && transaction.account_number_partial 
+          ? `${transaction.bank_name} ****${transaction.account_number_partial}`
+          : transaction.bank_name || 'Email Account',
+        notes: `Auto-imported from email: ${transaction.email_subject}`,
+        user_id: user?.id,
+        group_id: isPersonalMode ? null : currentGroup?.id
+      };
+
+      // Save to transactions table using storage service
+      const success = await addStoredTransaction(transactionData);
+      
+      if (success) {
+        // Update account balance if applicable
+        if (transactionData.account_name && accounts.find(a => a.name === transactionData.account_name)) {
+          await updateAccountBalance(
+            transactionData.account_name,
+            transactionData.amount,
+            transactionData.transaction_type as 'credit' | 'debit'
+          );
+        }
+
+        // Mark parsed transaction as processed
+        const { error } = await supabase
+          .from('parsed_transactions')
+          .update({
+            status: 'processed',
+            processed_at: new Date().toISOString()
+          })
+          .eq('id', transaction.id);
+
+        if (error) throw error;
+
+        // Remove from unprocessed list
+        setUnprocessedTransactions(prev => prev.filter(t => t.id !== transaction.id));
+        
+        // Refresh transactions list
+        fetchTransactions();
+        fetchAccounts();
+        refreshData();
+
+        toast({
+          title: "Transaction Approved",
+          description: "Transaction has been added to your records",
+        });
+      } else {
+        throw new Error('Failed to create transaction');
+      }
+    } catch (error) {
+      console.error('Error approving transaction:', error);
+      toast({
+        title: "Error",
+        description: "Failed to approve transaction",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectTransaction = async (transactionId: string) => {
+    try {
+      const { error } = await supabase
+        .from('parsed_transactions')
+        .update({
+          status: 'rejected',
+          processed_at: new Date().toISOString()
+        })
+        .eq('id', transactionId);
+
+      if (error) throw error;
+
+      // Remove from unprocessed list
+      setUnprocessedTransactions(prev => prev.filter(t => t.id !== transactionId));
+
+      toast({
+        title: "Transaction Rejected",
+        description: "Transaction has been rejected and won't be added",
+      });
+    } catch (error) {
+      console.error('Error rejecting transaction:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reject transaction",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewEmailDetails = (transaction: any) => {
+    toast({
+      title: "Email Details",
+      description: `Subject: ${transaction.email_subject}\nFrom: ${transaction.sender}\nConfidence: ${Math.round(transaction.confidence_score * 100)}%`,
+    });
   };
 
   const exportTransactions = () => {
@@ -664,6 +790,111 @@ const Transactions = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Unprocessed Transactions Section */}
+      {unprocessedTransactions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="h-5 w-5 text-orange-500" />
+                <CardTitle>Unprocessed Transactions ({unprocessedTransactions.length})</CardTitle>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowUnprocessed(!showUnprocessed)}
+              >
+                {showUnprocessed ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+            <p className="text-sm text-gray-600">
+              These transactions were extracted from your emails but need manual review
+            </p>
+          </CardHeader>
+          {showUnprocessed && (
+            <CardContent>
+              <div className="space-y-4">
+                {unprocessedTransactions.map((transaction) => (
+                  <div key={transaction.id} className="p-4 border rounded-lg bg-orange-50 dark:bg-orange-900/20">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <div className="font-medium text-lg">{transaction.description}</div>
+                          <Badge variant={transaction.transaction_type === 'credit' ? 'default' : 'destructive'}>
+                            {transaction.transaction_type}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {Math.round(transaction.confidence_score * 100)}% confidence
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-gray-600 space-x-4 mb-2">
+                          <span>From: {transaction.sender}</span>
+                          <span>•</span>
+                          <span>{transaction.email_subject}</span>
+                        </div>
+                        <div className="text-sm text-gray-500 space-x-4">
+                          <span>{transaction.category || 'Uncategorized'}</span>
+                          <span>•</span>
+                          <span>{format(new Date(transaction.transaction_date), 'MMM dd, yyyy')}</span>
+                          {transaction.bank_name && (
+                            <>
+                              <span>•</span>
+                              <span>{transaction.bank_name}</span>
+                            </>
+                          )}
+                          {transaction.account_number_partial && (
+                            <>
+                              <span>•</span>
+                              <span>****{transaction.account_number_partial}</span>
+                            </>
+                          )}
+                        </div>
+                        {transaction.parsing_notes && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            Note: {transaction.parsing_notes}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className={`text-lg font-semibold ${transaction.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
+                          {transaction.transaction_type === 'credit' ? '+' : '-'}₹{transaction.amount?.toLocaleString()}
+                        </div>
+                        <div className="flex space-x-1">
+                          <Button 
+                            size="sm" 
+                            variant="default"
+                            onClick={() => handleApproveTransaction(transaction)}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleRejectTransaction(transaction.id)}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => handleViewEmailDetails(transaction)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Edit Transaction Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>

@@ -30,7 +30,8 @@ import {
   Inbox,
   RefreshCw,
   AlertTriangle,
-  Plus
+  Plus,
+  Clock
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -52,6 +53,19 @@ const Profile = () => {
   const { user, userGroups, isPersonalMode, currentGroup } = useApp();
   const { toast } = useToast();
   
+  // Safe date formatting helper
+  const safeFormatDate = (date: string | null | undefined, formatStr: string, fallback: string = 'Unknown') => {
+    if (!date) return fallback;
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) return fallback;
+      return format(dateObj, formatStr);
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return fallback;
+    }
+  };
+  
   const [userMappings, setUserMappings] = useState<UserMapping[]>([]);
   const [groupMemberships, setGroupMemberships] = useState<GroupMembership[]>([]);
   const [stats, setStats] = useState({
@@ -71,6 +85,8 @@ const Profile = () => {
     connectGmail,
     disconnectEmail,
     syncEmails,
+    reprocessData,
+    resetSyncTime,
     processAccount
   } = useGmailOAuth();
 
@@ -343,7 +359,7 @@ const Profile = () => {
                           <div>
                             <div className="font-medium">{email.email}</div>
                             <div className="text-sm text-gray-500 capitalize">
-                              {email.provider} • Connected {format(new Date(email.connected_at), 'MMM dd')}
+                              {email.provider} • Connected {safeFormatDate(email.created_at, 'MMM dd')}
                             </div>
                           </div>
                         </div>
@@ -365,7 +381,7 @@ const Profile = () => {
                         <div>
                           <div className="text-gray-500">Last Sync</div>
                           <div className="font-medium">
-                            {format(new Date(email.last_sync), 'MMM dd, HH:mm')}
+                            {safeFormatDate(email.last_sync, 'MMM dd, HH:mm')}
                           </div>
                         </div>
                         <div>
@@ -399,6 +415,23 @@ const Profile = () => {
                       <RefreshCw className="h-4 w-4 mr-2" />
                     )}
                     Sync Emails
+                  </Button>
+                  <Button 
+                    onClick={reprocessData} 
+                    disabled={isProcessingEmails}
+                    variant="outline"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reprocess
+                  </Button>
+                  <Button 
+                    onClick={resetSyncTime} 
+                    disabled={isProcessingEmails}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Clock className="h-4 w-4 mr-1" />
+                    Reset Sync
                   </Button>
                 </div>
               </CardContent>
@@ -500,9 +533,9 @@ const Profile = () => {
                     <div key={account.id} className="p-4 border rounded-lg">
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <div className="font-medium">{account.discovered_account_name}</div>
+                          <div className="font-medium">{account.bank_name} ****{account.account_number_partial}</div>
                           <div className="text-sm text-gray-500">
-                            Discovered from {(account as any).email_integrations?.email || 'Unknown'} • {format(new Date(account.discovery_date), 'MMM dd, yyyy')}
+                            Discovered from {account.email || 'Unknown'} • {safeFormatDate(account.created_at, 'MMM dd, yyyy')}
                           </div>
                         </div>
                         <Badge variant="outline">
@@ -521,7 +554,7 @@ const Profile = () => {
                         </div>
                         <div>
                           <div className="text-gray-500">Balance</div>
-                          <div className="font-medium">₹{account.balance.toLocaleString()}</div>
+                          <div className="font-medium">₹{account.current_balance?.toLocaleString() || 'Unknown'}</div>
                         </div>
                         <div>
                           <div className="text-gray-500">Status</div>
@@ -590,7 +623,7 @@ const Profile = () => {
                               {group.description || 'No description'}
                             </div>
                             <div className="text-xs text-gray-400">
-                              Created {format(new Date(group.created_at), 'MMM dd, yyyy')}
+                              Created {safeFormatDate(group.created_at, 'MMM dd, yyyy')}
                             </div>
                           </div>
                         </div>

@@ -109,6 +109,30 @@ class GmailOAuthService {
     expiresAt?: Date
   ): Promise<EmailIntegration> {
     try {
+      // First, try to update existing integration
+      const { data: existingData, error: updateError } = await supabase
+        .from('email_integrations')
+        .update({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_at: expiresAt?.toISOString(),
+          scope: OAUTH_CONFIG.gmail.scope,
+          status: 'connected',
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId)
+        .eq('provider', 'gmail')
+        .eq('email', email)
+        .select()
+        .single();
+
+      // If update succeeded, return the updated data
+      if (!updateError && existingData) {
+        console.log('Updated existing email integration:', existingData);
+        return existingData;
+      }
+
+      // If no existing record, insert new one
       const { data, error } = await supabase
         .from('email_integrations')
         .insert({
@@ -126,11 +150,16 @@ class GmailOAuthService {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error storing email integration:', error);
+        throw error;
+      }
+      
+      console.log('Email integration stored successfully:', data);
       return data;
     } catch (error) {
       console.error('Error storing email integration:', error);
-      throw new Error('Failed to store email integration');
+      throw new Error(`Failed to store email integration: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -219,7 +248,8 @@ class GmailOAuthService {
   async getGmailMessages(
     accessToken: string,
     query: string = 'from:alerts OR from:noreply OR subject:transaction OR subject:payment',
-    maxResults: number = 50
+    maxResults: number = 50,
+    integrationId?: string
   ) {
     try {
       const params = new URLSearchParams({
@@ -227,11 +257,62 @@ class GmailOAuthService {
         maxResults: maxResults.toString()
       });
 
+      let currentToken = accessToken;
+      
       const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${currentToken}`,
         },
       });
+
+      // If token is expired, try to refresh it
+      if (response.status === 401 && integrationId) {
+        console.log('Access token expired, attempting to refresh...');
+        
+        try {
+          // Get the integration with refresh token
+          const { data: integration, error } = await supabase
+            .from('email_integrations')
+            .select('refresh_token')
+            .eq('id', integrationId)
+            .single();
+
+          if (error || !integration?.refresh_token) {
+            throw new Error('No refresh token available');
+          }
+
+          // Refresh the token
+          const newTokens = await this.refreshAccessToken(integration.refresh_token);
+          
+          // Update the integration with new tokens
+          await supabase
+            .from('email_integrations')
+            .update({
+              access_token: newTokens.access_token,
+              expires_at: newTokens.expires_in ? new Date(Date.now() + newTokens.expires_in * 1000).toISOString() : null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', integrationId);
+
+          // Retry the request with new token
+          const retryResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, {
+            headers: {
+              Authorization: `Bearer ${newTokens.access_token}`,
+            },
+          });
+
+          if (!retryResponse.ok) {
+            throw new Error(`Failed to fetch messages after token refresh: ${retryResponse.statusText}`);
+          }
+
+          const data = await retryResponse.json();
+          return data.messages || [];
+
+        } catch (refreshError) {
+          console.error('Error refreshing token:', refreshError);
+          throw new Error('Token expired and refresh failed. Please reconnect your Gmail account.');
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to fetch messages: ${response.statusText}`);
@@ -246,13 +327,62 @@ class GmailOAuthService {
   }
 
   // Get specific message content
-  async getMessageContent(accessToken: string, messageId: string) {
+  async getMessageContent(accessToken: string, messageId: string, integrationId?: string) {
     try {
       const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
       });
+
+      // If token is expired, try to refresh it
+      if (response.status === 401 && integrationId) {
+        console.log('Access token expired for message content, attempting to refresh...');
+        
+        try {
+          // Get the integration with refresh token
+          const { data: integration, error } = await supabase
+            .from('email_integrations')
+            .select('refresh_token, access_token')
+            .eq('id', integrationId)
+            .single();
+
+          if (error || !integration?.refresh_token) {
+            throw new Error('No refresh token available');
+          }
+
+          // Refresh the token
+          const newTokens = await this.refreshAccessToken(integration.refresh_token);
+          
+          // Update the integration with new tokens
+          await supabase
+            .from('email_integrations')
+            .update({
+              access_token: newTokens.access_token,
+              expires_at: newTokens.expires_in ? new Date(Date.now() + newTokens.expires_in * 1000).toISOString() : null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', integrationId);
+
+          // Retry the request with new token
+          const retryResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`, {
+            headers: {
+              Authorization: `Bearer ${newTokens.access_token}`,
+            },
+          });
+
+          if (!retryResponse.ok) {
+            throw new Error(`Failed to fetch message after token refresh: ${retryResponse.statusText}`);
+          }
+
+          const data = await retryResponse.json();
+          return data;
+
+        } catch (refreshError) {
+          console.error('Error refreshing token for message content:', refreshError);
+          throw new Error('Token expired and refresh failed. Please reconnect your Gmail account.');
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to fetch message: ${response.statusText}`);
@@ -266,23 +396,105 @@ class GmailOAuthService {
     }
   }
 
+  // Process transaction emails using the email parser
+  async processTransactionEmails(userId: string, integrationId: string): Promise<{
+    transactions: any[];
+    accounts: any[];
+    processed_count: number;
+    errors: string[];
+  }> {
+    try {
+      console.log('Starting email processing for user:', userId, 'integration:', integrationId);
+      
+      // Import the email parsing service
+      const { emailParsingService } = await import('./emailParser');
+      
+      // Process emails for the user
+      const results = await emailParsingService.processEmailsForUser(userId, integrationId);
+      
+      console.log('Email processing completed:', results);
+      
+      // Update integration stats
+      await this.updateEmailIntegration(integrationId, {
+        last_sync: new Date().toISOString(),
+        transactions_processed: results.transactions.length,
+        accounts_discovered: results.accounts.length
+      });
+      
+      return results;
+    } catch (error) {
+      console.error('Error processing transaction emails:', error);
+      throw new Error(`Failed to process emails: ${error}`);
+    }
+  }
+
+  // Reprocess stored emails without fetching new ones
+  async reprocessStoredEmails(userId: string, integrationId: string): Promise<{
+    transactions: any[];
+    accounts: any[];
+    processed_count: number;
+    errors: string[];
+  }> {
+    try {
+      console.log('Starting email reprocessing for user:', userId, 'integration:', integrationId);
+      
+      // Import the email parsing service
+      const { emailParsingService } = await import('./emailParser');
+      
+      // Reprocess stored emails
+      const results = await emailParsingService.reprocessStoredEmails(userId, integrationId);
+      
+      console.log('Email reprocessing completed:', results);
+      
+      // Update integration stats
+      await this.updateEmailIntegration(integrationId, {
+        transactions_processed: results.transactions.length,
+        accounts_discovered: results.accounts.length
+      });
+      
+      return results;
+    } catch (error) {
+      console.error('Error reprocessing stored emails:', error);
+      throw new Error(`Failed to reprocess emails: ${error}`);
+    }
+  }
+
   // Get unprocessed accounts for a user
   async getUnprocessedAccounts(userId: string): Promise<UnprocessedAccount[]> {
     try {
+      // Try to get from the view first
+      const { data: viewData, error: viewError } = await supabase
+        .from('pending_account_discoveries')
+        .select('*')
+        .eq('user_id', userId)
+        .order('confidence_score', { ascending: false });
+
+      if (!viewError && viewData && viewData.length > 0) {
+        console.log('Found accounts from view:', viewData.length);
+        return viewData;
+      }
+
+      // Fallback: get directly from discovered_accounts table
+      console.log('View returned no data, trying discovered_accounts table directly');
       const { data, error } = await supabase
-        .from('unprocessed_accounts')
+        .from('discovered_accounts')
         .select(`
           *,
-          email_integrations:source_email_integration_id (
+          email_integrations:email_integration_id (
             email,
             provider
           )
         `)
         .eq('user_id', userId)
         .eq('status', 'pending')
-        .order('discovery_date', { ascending: false });
+        .order('confidence_score', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching from discovered_accounts:', error);
+        throw error;
+      }
+      
+      console.log('Found accounts from table:', data?.length || 0);
       return data || [];
     } catch (error) {
       console.error('Error fetching unprocessed accounts:', error);
@@ -296,16 +508,59 @@ class GmailOAuthService {
     action: 'approved' | 'rejected'
   ): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('unprocessed_accounts')
-        .update({
-          status: action,
-          processed_date: new Date().toISOString()
-        })
-        .eq('id', accountId);
+      if (action === 'approved') {
+        // Get the discovered account details
+        const { data: account, error: fetchError } = await supabase
+          .from('discovered_accounts')
+          .select('*')
+          .eq('id', accountId)
+          .single();
 
-      if (error) throw error;
-      return true;
+        if (fetchError || !account) {
+          throw new Error('Account not found');
+        }
+
+        // Create a financial account from the discovered account
+        const { addFinancialAccount } = await import('@/utils/storageService');
+        
+        const accountData = {
+          name: account.bank_name && account.account_number_partial 
+            ? `${account.bank_name} ****${account.account_number_partial}`
+            : account.bank_name || 'Discovered Account',
+          type: account.account_type || 'savings',
+          balance: account.current_balance || 0,
+          bank_name: account.bank_name,
+          account_number_partial: account.account_number_partial,
+          user_id: account.user_id,
+          group_id: null // Personal account
+        };
+
+        const success = await addFinancialAccount(accountData);
+        
+        if (success) {
+          // Mark the discovered account as approved
+          await supabase
+            .from('discovered_accounts')
+            .update({
+              status: 'approved',
+              processed_at: new Date().toISOString()
+            })
+            .eq('id', accountId);
+        }
+
+        return success;
+      } else {
+        // Mark as rejected
+        await supabase
+          .from('discovered_accounts')
+          .update({
+            status: 'rejected',
+            processed_at: new Date().toISOString()
+          })
+          .eq('id', accountId);
+        
+        return true;
+      }
     } catch (error) {
       console.error('Error processing unprocessed account:', error);
       return false;

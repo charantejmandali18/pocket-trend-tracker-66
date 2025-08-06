@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { gmailOAuthService } from '@/services/gmailOAuth';
 import { useApp } from '@/contexts/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, AlertCircle, Loader } from 'lucide-react';
 
@@ -28,8 +29,15 @@ const GmailCallback = () => {
         throw new Error('No authorization code received');
       }
 
-      if (!user) {
-        throw new Error('User not logged in');
+      // Wait for user to be available, or get from Supabase auth directly
+      let currentUser = user;
+      if (!currentUser) {
+        // Get user from Supabase auth directly
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser) {
+          throw new Error('User not authenticated');
+        }
+        currentUser = authUser;
       }
 
       // Exchange code for tokens
@@ -53,7 +61,7 @@ const GmailCallback = () => {
       const expiresAt = tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined;
       
       await gmailOAuthService.storeEmailIntegration(
-        user.id,
+        currentUser.id,
         userInfo.email,
         tokens.access_token,
         tokens.refresh_token,
