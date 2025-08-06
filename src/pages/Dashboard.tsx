@@ -18,6 +18,7 @@ import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { STORAGE_CONFIG } from '@/config/storage';
+import { formatFullIndianCurrency, formatIndianCurrency } from '@/utils/currency';
 
 // Import both storage implementations
 import { 
@@ -81,7 +82,7 @@ interface CategorySummary {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, isPersonalMode, currentGroup, categories, dataVersion } = useApp();
+  const { user, isPersonalMode, currentGroup, categories, selectedMonth, dataVersion } = useApp();
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     totalCredit: 0,
     totalDebit: 0,
@@ -110,7 +111,7 @@ const Dashboard = () => {
     if (user) {
       fetchDashboardData();
     }
-  }, [user, isPersonalMode, currentGroup, dataVersion]);
+  }, [user, isPersonalMode, currentGroup, selectedMonth, dataVersion]);
 
   const fetchDashboardData = async () => {
     if (!user) return;
@@ -172,9 +173,9 @@ const Dashboard = () => {
       
       const netWorth = totalAssets - totalLiabilities;
 
-      // Filter transactions by current month
-      const currentMonthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-      const currentMonthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+      // Filter transactions by selected month
+      const currentMonthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
+      const currentMonthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
       
       const monthlyTransactions = transactions.filter(t => 
         t.transaction_date >= currentMonthStart && t.transaction_date <= currentMonthEnd
@@ -193,18 +194,26 @@ const Dashboard = () => {
       const categoryMap = new Map<string, CategorySummary>();
       
       monthlyTransactions.forEach(transaction => {
-        const category = transaction.categories;
-        if (category && transaction.transaction_type === 'debit') {
-          const existing = categoryMap.get(category.id);
+        if (transaction.transaction_type === 'debit') {
+          const category = transaction.categories || categories.find(c => c.id === transaction.category_id);
+          
+          // Use "Other" for uncategorized transactions
+          const categoryData = category || {
+            id: 'other',
+            name: 'Other',
+            color: '#6B7280'
+          };
+          
+          const existing = categoryMap.get(categoryData.id);
           if (existing) {
             existing.amount += transaction.amount;
             existing.transactionCount += 1;
           } else {
-            categoryMap.set(category.id, {
-              id: category.id,
-              name: category.name,
+            categoryMap.set(categoryData.id, {
+              id: categoryData.id,
+              name: categoryData.name,
               amount: transaction.amount,
-              color: category.color || '#3B82F6',
+              color: categoryData.color || '#3B82F6',
               transactionCount: 1
             });
           }
@@ -217,9 +226,11 @@ const Dashboard = () => {
 
       // Calculate monthly overview
       const now = new Date();
-      const currentDay = now.getDate();
-      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      const daysRemaining = daysInMonth - currentDay;
+      const selectedMonthDate = new Date(selectedMonth);
+      const isCurrentMonth = now.getFullYear() === selectedMonthDate.getFullYear() && now.getMonth() === selectedMonthDate.getMonth();
+      const currentDay = isCurrentMonth ? now.getDate() : selectedMonthDate.getDate();
+      const daysInMonth = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0).getDate();
+      const daysRemaining = isCurrentMonth ? daysInMonth - currentDay : 0;
       
       const avgDailySpending = currentDay > 0 ? totalDebit / currentDay : 0;
       const projectedMonthlySpending = avgDailySpending * daysInMonth;
@@ -278,7 +289,7 @@ const Dashboard = () => {
     }
   };
 
-  const currentMonth = format(new Date(), 'MMMM yyyy');
+  const currentMonth = format(selectedMonth, 'MMMM yyyy');
   const { accountBalances, monthlyOverview } = dashboardData;
   const remainingBudget = dashboardData.totalCredit - dashboardData.totalDebit;
   const savingsRate = dashboardData.totalCredit > 0 
@@ -315,14 +326,14 @@ const Dashboard = () => {
 
       {/* Account Balances Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
             <DollarSign className="h-4 w-4 text-blue-600" />
           </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${accountBalances.netWorth >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-              {accountBalances.netWorth >= 0 ? '+' : ''}₹{accountBalances.netWorth.toLocaleString()}
+          <CardContent className="min-w-0">
+            <div className={`text-xl sm:text-2xl font-bold leading-none ${accountBalances.netWorth >= 0 ? 'text-blue-600' : 'text-red-600'} break-words`}>
+              {formatIndianCurrency(accountBalances.netWorth)}
             </div>
             <div className="text-xs text-gray-500">
               Assets - Liabilities
@@ -330,14 +341,14 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Liquid Cash</CardTitle>
             <DollarSign className="h-4 w-4 text-green-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              ₹{accountBalances.liquidCash.toLocaleString()}
+          <CardContent className="min-w-0">
+            <div className="text-xl sm:text-2xl font-bold text-green-600 leading-none break-words">
+              {formatIndianCurrency(accountBalances.liquidCash)}
             </div>
             <div className="text-xs text-gray-500">
               Available cash & savings
@@ -345,14 +356,14 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Monthly Spent</CardTitle>
             <TrendingDown className="h-4 w-4 text-red-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              ₹{dashboardData.totalDebit.toLocaleString()}
+          <CardContent className="min-w-0">
+            <div className="text-xl sm:text-2xl font-bold text-red-600 leading-none break-words">
+              {formatIndianCurrency(dashboardData.totalDebit)}
             </div>
             <div className="text-xs text-gray-500">
               {currentMonth}
@@ -360,14 +371,14 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Monthly Earned</CardTitle>
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              ₹{dashboardData.totalCredit.toLocaleString()}
+          <CardContent className="min-w-0">
+            <div className="text-xl sm:text-2xl font-bold text-green-600 leading-none break-words">
+              {formatIndianCurrency(dashboardData.totalCredit)}
             </div>
             <div className="text-xs text-gray-500">
               {currentMonth}
@@ -400,7 +411,7 @@ const Dashboard = () => {
                         <span className="text-sm font-medium">{category.name}</span>
                       </div>
                       <div className="text-sm text-gray-500">
-                        ₹{category.amount.toLocaleString()} ({category.transactionCount} transactions)
+                        {formatFullIndianCurrency(category.amount)} ({category.transactionCount} transactions)
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -435,7 +446,7 @@ const Dashboard = () => {
             {!isPersonalMode && currentGroup && dashboardData.memberSpending ? (
               <div className="space-y-4">
                 <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Group Asset: ₹{dashboardData.totalDebit.toLocaleString()} total spent
+                  Group Asset: {formatFullIndianCurrency(dashboardData.totalDebit)} total spent
                 </div>
                 {Object.entries(dashboardData.memberSpending).map(([userId, amount]) => (
                   <div key={userId} className="flex items-center justify-between">
@@ -450,7 +461,7 @@ const Dashboard = () => {
                       </span>
                     </div>
                     <div className="text-sm font-medium">
-                      ₹{(amount as number).toLocaleString()}
+                      {formatFullIndianCurrency(amount as number)}
                     </div>
                   </div>
                 ))}
@@ -521,7 +532,7 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div className="text-2xl font-bold text-blue-600">
-                  ₹{dashboardData.projections.dailyBurnRate.toLocaleString()}
+                  {formatIndianCurrency(dashboardData.projections.dailyBurnRate)}
                 </div>
                 <div className="text-xs text-blue-600">Daily Burn Rate</div>
                 <div className="text-xs text-gray-500 mt-1">
@@ -531,7 +542,7 @@ const Dashboard = () => {
               
               <div className="text-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
                 <div className="text-2xl font-bold text-orange-600">
-                  ₹{dashboardData.projections.projectedSpending.toLocaleString()}
+                  {formatIndianCurrency(dashboardData.projections.projectedSpending)}
                 </div>
                 <div className="text-xs text-orange-600">Projected Total</div>
                 <div className="text-xs text-gray-500 mt-1">
@@ -551,7 +562,7 @@ const Dashboard = () => {
               
               <div className="text-center p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
                 <div className={`text-2xl font-bold ${dashboardData.projections.monthEndBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {dashboardData.projections.monthEndBalance >= 0 ? '+' : ''}₹{dashboardData.projections.monthEndBalance.toLocaleString()}
+                  {formatFullIndianCurrency(dashboardData.projections.monthEndBalance)}
                 </div>
                 <div className="text-xs text-indigo-600">Projected Balance</div>
                 <div className="text-xs text-gray-500 mt-1">
@@ -566,7 +577,7 @@ const Dashboard = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span>Current Spending ({format(new Date(), 'MMM dd')})</span>
-                    <span className="font-medium">₹{dashboardData.totalDebit.toLocaleString()}</span>
+                    <span className="font-medium">{formatFullIndianCurrency(dashboardData.totalDebit)}</span>
                   </div>
                   <Progress 
                     value={(dashboardData.totalDebit / dashboardData.projections.projectedSpending) * 100} 
@@ -574,7 +585,7 @@ const Dashboard = () => {
                   />
                   <div className="flex justify-between text-sm">
                     <span>Projected Total</span>
-                    <span className="font-medium">₹{dashboardData.projections.projectedSpending.toLocaleString()}</span>
+                    <span className="font-medium">{formatFullIndianCurrency(dashboardData.projections.projectedSpending)}</span>
                   </div>
                   <div className="text-xs text-gray-500">
                     {dashboardData.projections.daysRemaining} days remaining in {format(new Date(), 'MMMM')}
@@ -605,12 +616,12 @@ const Dashboard = () => {
                   )}
                   
                   <div className="text-xs text-gray-500 mt-2">
-                    Daily recommended spending: ₹{((dashboardData.totalCredit * 0.8) / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).toLocaleString()}
+                    Daily recommended spending: {formatIndianCurrency((dashboardData.totalCredit * 0.8) / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate())}
                   </div>
                   
                   {dashboardData.projections.monthEndBalance < 0 && (
                     <div className="text-xs text-red-600 mt-2">
-                      ⚠️ Projected to overspend by ₹{Math.abs(dashboardData.projections.monthEndBalance).toLocaleString()}
+                      ⚠️ Projected to overspend by {formatFullIndianCurrency(Math.abs(dashboardData.projections.monthEndBalance))}
                     </div>
                   )}
                 </div>

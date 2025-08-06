@@ -23,7 +23,7 @@ import {
   Clock,
   Eye
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,6 +42,7 @@ import {
   type FinancialAccount
 } from '@/utils/storageService';
 import { emailParsingService } from '@/services/emailParser';
+import { formatFullIndianCurrency, formatIndianCurrency } from '@/utils/currency';
 
 type Transaction = Tables<'transactions'> & {
   categories: Tables<'categories'>;
@@ -59,8 +60,12 @@ interface FilterState {
 const Transactions = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, isPersonalMode, currentGroup, categories, dataVersion, refreshData } = useApp();
+  const { user, isPersonalMode, currentGroup, categories, selectedMonth, dataVersion, refreshData } = useApp();
   const { toast } = useToast();
+
+  // Initialize date filters based on selected month
+  const monthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
+  const monthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
@@ -84,11 +89,11 @@ const Transactions = () => {
 
   const [filters, setFilters] = useState<FilterState>({
     search: '',
-    category: searchParams.get('category') || '',
-    type: '',
-    dateFrom: '',
-    dateTo: '',
-    paymentMethod: ''
+    category: searchParams.get('category') || 'all',
+    type: 'all',
+    dateFrom: monthStart,
+    dateTo: monthEnd,
+    paymentMethod: 'all'
   });
 
   useEffect(() => {
@@ -98,6 +103,17 @@ const Transactions = () => {
       fetchUnprocessedTransactions();
     }
   }, [user, isPersonalMode, currentGroup, dataVersion]);
+
+  // Update date filters when selected month changes
+  useEffect(() => {
+    const newMonthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
+    const newMonthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
+    setFilters(prev => ({
+      ...prev,
+      dateFrom: newMonthStart,
+      dateTo: newMonthEnd
+    }));
+  }, [selectedMonth]);
 
   const fetchUnprocessedTransactions = async () => {
     if (!user) return;
@@ -221,12 +237,12 @@ const Transactions = () => {
     }
 
     // Category filter
-    if (filters.category) {
+    if (filters.category && filters.category !== 'all') {
       filtered = filtered.filter(t => t.category_id === filters.category);
     }
 
     // Type filter
-    if (filters.type) {
+    if (filters.type && filters.type !== 'all') {
       filtered = filtered.filter(t => t.transaction_type === filters.type);
     }
 
@@ -239,7 +255,7 @@ const Transactions = () => {
     }
 
     // Payment method filter
-    if (filters.paymentMethod) {
+    if (filters.paymentMethod && filters.paymentMethod !== 'all') {
       filtered = filtered.filter(t => t.payment_method === filters.paymentMethod);
     }
 
@@ -249,11 +265,11 @@ const Transactions = () => {
   const clearFilters = () => {
     setFilters({
       search: '',
-      category: '',
-      type: '',
+      category: 'all',
+      type: 'all',
       dateFrom: '',
       dateTo: '',
-      paymentMethod: ''
+      paymentMethod: 'all'
     });
     setShowFilters(false);
   };
@@ -570,7 +586,7 @@ const Transactions = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              ₹{totalCredit.toLocaleString()}
+              {formatFullIndianCurrency(totalCredit)}
             </div>
           </CardContent>
         </Card>
@@ -580,7 +596,7 @@ const Transactions = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              ₹{totalDebit.toLocaleString()}
+              {formatFullIndianCurrency(totalDebit)}
             </div>
           </CardContent>
         </Card>
@@ -609,7 +625,7 @@ const Transactions = () => {
                 <Filter className="h-4 w-4 mr-2" />
                 Filters
               </Button>
-              {(filters.category || filters.type || filters.dateFrom || filters.dateTo || filters.paymentMethod) && (
+              {((filters.category && filters.category !== 'all') || (filters.type && filters.type !== 'all') || filters.dateFrom || filters.dateTo || (filters.paymentMethod && filters.paymentMethod !== 'all')) && (
                 <Button variant="ghost" onClick={clearFilters}>
                   <X className="h-4 w-4 mr-2" />
                   Clear
@@ -626,7 +642,7 @@ const Transactions = () => {
                       <SelectValue placeholder="All categories" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All categories</SelectItem>
+                      <SelectItem value="all">All categories</SelectItem>
                       {categories.map((category) => (
                         <SelectItem key={category.id} value={category.id}>
                           <div className="flex items-center space-x-2">
@@ -646,7 +662,7 @@ const Transactions = () => {
                       <SelectValue placeholder="All types" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All types</SelectItem>
+                      <SelectItem value="all">All types</SelectItem>
                       <SelectItem value="credit">Credit</SelectItem>
                       <SelectItem value="debit">Debit</SelectItem>
                     </SelectContent>
@@ -678,7 +694,7 @@ const Transactions = () => {
                       <SelectValue placeholder="All methods" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All methods</SelectItem>
+                      <SelectItem value="all">All methods</SelectItem>
                       {paymentMethods.map((method) => (
                         <SelectItem key={method} value={method}>
                           {method === 'debit_card' ? 'Debit Card' : 
@@ -752,7 +768,7 @@ const Transactions = () => {
                   </div>
                   <div className="flex items-center space-x-3">
                     <div className={`text-lg font-semibold ${transaction.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
-                      {transaction.transaction_type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
+                      {transaction.transaction_type === 'credit' ? '+' : '-'}{formatFullIndianCurrency(transaction.amount).replace('₹', '₹')}
                     </div>
                     <div className="flex space-x-1">
                       <Button 
@@ -858,7 +874,7 @@ const Transactions = () => {
                       </div>
                       <div className="flex items-center space-x-3">
                         <div className={`text-lg font-semibold ${transaction.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
-                          {transaction.transaction_type === 'credit' ? '+' : '-'}₹{transaction.amount?.toLocaleString()}
+                          {transaction.transaction_type === 'credit' ? '+' : '-'}{formatFullIndianCurrency(transaction.amount || 0).replace('₹', '₹')}
                         </div>
                         <div className="flex space-x-1">
                           <Button 
@@ -1001,7 +1017,7 @@ const Transactions = () => {
                           <div className="w-3 h-3 rounded-full bg-blue-500" />
                           <span>{account.name}</span>
                           <span className="text-xs text-gray-500">
-                            ({account.type} • ₹{account.balance.toLocaleString()})
+                            ({account.type} • {formatIndianCurrency(account.balance)})
                           </span>
                         </div>
                       </SelectItem>

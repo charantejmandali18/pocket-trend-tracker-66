@@ -44,6 +44,10 @@ interface AppContextType {
   // Categories
   categories: any[];
   
+  // Date/Month selection
+  selectedMonth: Date;
+  setSelectedMonth: (date: Date) => void;
+  
   // Data version for triggering updates
   dataVersion: number;
   
@@ -78,6 +82,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [userGroups, setUserGroups] = useState<StoredGroup[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [isPersonalMode, setIsPersonalMode] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [dataVersion, setDataVersion] = useState(0);
   const { toast } = useToast();
@@ -365,6 +370,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     userGroups,
     isPersonalMode,
     categories,
+    selectedMonth,
+    setSelectedMonth,
     dataVersion,
     switchToPersonal,
     switchToGroup,

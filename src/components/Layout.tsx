@@ -50,8 +50,6 @@ const navigation = [
 
 const Layout = () => {
   const location = useLocation();
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
-  const currentMonth = format(selectedMonth, 'MMMM yyyy');
   const { 
     user,
     currentGroup, 
@@ -61,8 +59,11 @@ const Layout = () => {
     switchToGroup,
     createGroup,
     joinGroup,
+    selectedMonth,
+    setSelectedMonth,
     dataVersion
   } = useApp();
+  const currentMonth = format(selectedMonth, 'MMMM yyyy');
 
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
