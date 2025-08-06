@@ -39,10 +39,12 @@ import { format } from 'date-fns';
 import { 
   getPersonalTransactions, 
   getGroupTransactions,
+  clearAllStoredData
+} from '@/utils/storageService';
+import {
   getUserMappings,
   getStoredGroups,
   getGroupMemberships,
-  clearAllStoredData,
   type UserMapping,
   type StoredGroup,
   type GroupMembership
@@ -50,6 +52,7 @@ import {
 import { useGmailOAuth } from '@/hooks/useGmailOAuth';
 import CreditReportUpload from '@/components/CreditReportUpload';
 import { creditReportParser, type CreditReportAccount } from '@/services/creditReportParser';
+import { supabase } from '@/integrations/supabase/client';
 
 const Profile = () => {
   const { user, userGroups, isPersonalMode, currentGroup } = useApp();
@@ -75,7 +78,10 @@ const Profile = () => {
     groupTransactions: 0,
     totalAmount: 0,
     groupsOwned: 0,
-    groupsJoined: 0
+    groupsJoined: 0,
+    parsedTransactions: 0,
+    discoveredAccounts: 0,
+    recentActivity: 0
   });
 
   // Gmail OAuth integration
@@ -90,7 +96,8 @@ const Profile = () => {
     reprocessData,
     resetSyncTime,
     processAccount,
-    addCreditReportAccounts
+    addCreditReportAccounts,
+    getDiscoveredAccounts
   } = useGmailOAuth();
 
   useEffect(() => {
@@ -99,40 +106,146 @@ const Profile = () => {
     }
   }, [user]);
 
-  const fetchProfileData = () => {
+  const fetchProfileData = async () => {
     if (!user) return;
 
-    // Get user mappings
-    const mappings = getUserMappings();
-    setUserMappings(mappings);
+    try {
+      // Get user mappings (still from localStorage for now)
+      const mappings = getUserMappings();
+      setUserMappings(mappings);
 
-    // Get group memberships
-    const memberships = getGroupMemberships();
-    const userMemberships = memberships.filter(m => m.user_id === user.id);
-    setGroupMemberships(userMemberships);
+      // Get group memberships (still from localStorage for now)
+      const memberships = getGroupMemberships();
+      const userMemberships = memberships.filter(m => m.user_id === user.id);
+      setGroupMemberships(userMemberships);
 
-    // Calculate stats
-    const personalTxns = getPersonalTransactions(user.id, user.email);
-    const allGroupTxns = userGroups.flatMap(group => getGroupTransactions(group.id));
-    
-    const personalAmount = personalTxns.reduce((sum, t) => {
-      return sum + (t.transaction_type === 'income' ? t.amount : -t.amount);
-    }, 0);
-    
-    const groupAmount = allGroupTxns.reduce((sum, t) => {
-      return sum + (t.transaction_type === 'income' ? t.amount : -t.amount);
-    }, 0);
+      // Calculate stats using unified storage service (works with Supabase)
+      const personalTxns = await getPersonalTransactions(user.id, user.email);
+      const allGroupTxns = await Promise.all(
+        userGroups.map(group => getGroupTransactions(group.id))
+      ).then(results => results.flat());
+      
+      // Calculate net balance using actual account balances instead of transaction flows
+      // Net Balance = Bank accounts + Savings + Checking + Wallets - Credit Card balances
+      let netBalance = 0;
+      try {
+        // Get balances from main accounts table
+        const { data: accounts, error: accountsError } = await supabase
+          .from('accounts')
+          .select('account_type, balance')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        
+        if (!accountsError && accounts) {
+          netBalance = accounts.reduce((sum, account) => {
+            const balance = parseFloat(account.balance) || 0;
+            // Add positive balances for asset accounts, subtract credit card balances (debt)
+            if (['bank', 'savings', 'checking', 'wallet', 'cash', 'investment'].includes(account.account_type)) {
+              return sum + balance;
+            } else if (account.account_type === 'credit_card') {
+              return sum - balance; // Credit card balance is debt, so subtract it
+            }
+            return sum; // For other account types like loans, don't include in net balance
+          }, 0);
+        }
 
-    const groupsOwned = userGroups.filter(g => g.owner_id === user.id).length;
-    const groupsJoined = userGroups.filter(g => g.owner_id !== user.id).length;
+        // Also include approved discovered accounts with known balances
+        const { data: discoveredAccs, error: discoveredError } = await supabase
+          .from('discovered_accounts')
+          .select('account_type, current_balance')
+          .eq('user_id', user.id)
+          .eq('status', 'approved')
+          .not('current_balance', 'is', null);
+        
+        if (!discoveredError && discoveredAccs) {
+          const discoveredBalance = discoveredAccs.reduce((sum, account) => {
+            const balance = parseFloat(account.current_balance) || 0;
+            if (['bank', 'savings', 'checking', 'wallet', 'cash'].includes(account.account_type)) {
+              return sum + balance;
+            } else if (account.account_type === 'credit_card') {
+              return sum - balance; // Credit card balance is debt
+            }
+            return sum;
+          }, 0);
+          netBalance += discoveredBalance;
+        }
+      } catch (error) {
+        console.error('Error calculating net balance from accounts:', error);
+        // Fallback to old transaction-based calculation if accounts query fails
+        const personalAmount = personalTxns.reduce((sum, t) => {
+          return sum + (t.transaction_type === 'income' ? t.amount : -t.amount);
+        }, 0);
+        
+        const groupAmount = allGroupTxns.reduce((sum, t) => {
+          return sum + (t.transaction_type === 'income' ? t.amount : -t.amount);
+        }, 0);
+        
+        netBalance = personalAmount + groupAmount;
+      }
 
-    setStats({
-      personalTransactions: personalTxns.length,
-      groupTransactions: allGroupTxns.length,
-      totalAmount: personalAmount + groupAmount,
-      groupsOwned,
-      groupsJoined
-    });
+      const groupsOwned = userGroups.filter(g => g.owner_id === user.id).length;
+      const groupsJoined = userGroups.filter(g => g.owner_id !== user.id).length;
+
+      // Get additional activity data from Supabase
+      let parsedTransactions = 0;
+      let discoveredAccounts = 0;
+      let recentActivity = 0;
+
+      try {
+        // Get parsed transactions count
+        const { data: parsedTx, error: txError } = await supabase
+          .from('parsed_transactions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        
+        if (!txError) {
+          parsedTransactions = parsedTx || 0;
+        }
+
+        // Get discovered accounts count
+        const { data: discoveredAcc, error: accError } = await supabase
+          .from('discovered_accounts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        
+        if (!accError) {
+          discoveredAccounts = discoveredAcc || 0;
+        }
+
+        // Recent activity: transactions + parsed transactions from last 7 days
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        const { data: recentParsed, error: recentError } = await supabase
+          .from('parsed_transactions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('created_at', sevenDaysAgo.toISOString());
+        
+        if (!recentError) {
+          recentActivity = (recentParsed || 0) + personalTxns.filter(t => {
+            const txDate = new Date(t.transaction_date || t.created_at || 0);
+            return txDate >= sevenDaysAgo;
+          }).length;
+        }
+
+      } catch (error) {
+        console.error('Error fetching activity data:', error);
+      }
+
+      setStats({
+        personalTransactions: personalTxns.length,
+        groupTransactions: allGroupTxns.length,
+        totalAmount: netBalance,
+        groupsOwned,
+        groupsJoined,
+        parsedTransactions,
+        discoveredAccounts,
+        recentActivity
+      });
+    } catch (error) {
+      console.error('Error fetching profile data:', error);
+    }
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -143,46 +256,67 @@ const Profile = () => {
     });
   };
 
-  const exportData = () => {
-    const personalTxns = getPersonalTransactions(user.id, user.email);
-    const allGroupTxns = userGroups.flatMap(group => getGroupTransactions(group.id));
+  const exportData = async () => {
+    try {
+      const personalTxns = await getPersonalTransactions(user.id, user.email);
+      const allGroupTxns = await Promise.all(
+        userGroups.map(group => getGroupTransactions(group.id))
+      ).then(results => results.flat());
     
-    const data = {
-      user: {
-        id: user.id,
-        email: user.email,
-        exportDate: new Date().toISOString()
-      },
-      personalTransactions: personalTxns,
-      groupTransactions: allGroupTxns,
-      groups: userGroups,
-      userMappings: userMappings
-    };
+      const data = {
+        user: {
+          id: user.id,
+          email: user.email,
+          exportDate: new Date().toISOString()
+        },
+        personalTransactions: personalTxns,
+        groupTransactions: allGroupTxns,
+        groups: userGroups,
+        userMappings: userMappings,
+        stats: stats
+      };
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `pocket-tracker-export-${format(new Date(), 'yyyy-MM-dd')}.json`;
-    link.click();
-    window.URL.revokeObjectURL(url);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `pocket-tracker-export-${format(new Date(), 'yyyy-MM-dd')}.json`;
+      link.click();
+      window.URL.revokeObjectURL(url);
 
-    toast({
-      title: "Success",
-      description: "Data exported successfully",
-    });
-  };
-
-  const clearAllData = () => {
-    if (window.confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
-      clearAllStoredData();
       toast({
-        title: "Data Cleared",
-        description: "All stored data has been cleared",
+        title: "Success",
+        description: "Data exported successfully",
+      });
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to export data",
         variant: "destructive",
       });
-      // Reload page to reset state
-      window.location.reload();
+    }
+  };
+
+  const clearAllData = async () => {
+    if (window.confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
+      try {
+        await clearAllStoredData();
+        toast({
+          title: "Data Cleared",
+          description: "All stored data has been cleared",
+          variant: "destructive",
+        });
+        // Reload page to reset state
+        window.location.reload();
+      } catch (error) {
+        console.error('Error clearing data:', error);
+        toast({
+          title: "Error",
+          description: "Failed to clear all data",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -225,6 +359,7 @@ const Profile = () => {
       });
     }
   };
+
 
   if (!user) {
     return (
@@ -330,8 +465,8 @@ const Profile = () => {
                 <div className="text-xs text-green-600">Group Transactions</div>
               </div>
               <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                <div className={`text-2xl font-bold ${stats.totalAmount >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
-                  {stats.totalAmount >= 0 ? '+' : ''}₹{stats.totalAmount.toLocaleString()}
+                <div className={`text-2xl font-bold ${stats.totalAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  ₹{stats.totalAmount.toLocaleString()}
                 </div>
                 <div className="text-xs text-purple-600">Net Balance</div>
               </div>
@@ -342,6 +477,18 @@ const Profile = () => {
               <div className="text-center p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
                 <div className="text-2xl font-bold text-indigo-600">{stats.groupsJoined}</div>
                 <div className="text-xs text-indigo-600">Groups Joined</div>
+              </div>
+              <div className="text-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-orange-600">{stats.parsedTransactions}</div>
+                <div className="text-xs text-orange-600">Email Transactions</div>
+              </div>
+              <div className="text-center p-4 bg-teal-50 dark:bg-teal-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-teal-600">{stats.discoveredAccounts}</div>
+                <div className="text-xs text-teal-600">Discovered Accounts</div>
+              </div>
+              <div className="text-center p-4 bg-rose-50 dark:bg-rose-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-rose-600">{stats.recentActivity}</div>
+                <div className="text-xs text-rose-600">Recent Activity (7d)</div>
               </div>
               <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="text-2xl font-bold text-gray-600">{userMappings.length}</div>
