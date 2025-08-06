@@ -566,6 +566,56 @@ class GmailOAuthService {
       return false;
     }
   }
+
+  // Add credit report accounts to unprocessed accounts
+  async addCreditReportAccounts(
+    userId: string,
+    accounts: Array<{
+      bank_name: string;
+      account_type: string;
+      account_number_partial: string;
+      balance?: number;
+      credit_limit?: number;
+      open_date?: string;
+      confidence_score: number;
+      raw_data?: string;
+    }>
+  ): Promise<boolean> {
+    try {
+      const accountsToInsert = accounts.map(account => ({
+        user_id: userId,
+        email_integration_id: null, // Credit report uploads don't have email integration
+        discovered_account_name: `${account.bank_name} - ${account.account_type}`,
+        bank_name: account.bank_name,
+        account_type: account.account_type,
+        current_balance: account.balance,
+        account_number_partial: account.account_number_partial,
+        confidence_score: account.confidence_score,
+        needs_review: account.confidence_score < 0.8,
+        status: 'pending' as const,
+        discovery_date: new Date().toISOString(),
+        discovery_notes: `Imported from credit report - Confidence: ${Math.round(account.confidence_score * 100)}%`,
+        raw_data: account.raw_data,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('discovered_accounts')
+        .insert(accountsToInsert);
+
+      if (error) {
+        console.error('Error inserting credit report accounts:', error);
+        throw error;
+      }
+
+      console.log(`Successfully added ${accounts.length} credit report accounts`);
+      return true;
+    } catch (error) {
+      console.error('Error adding credit report accounts:', error);
+      return false;
+    }
+  }
 }
 
 export const gmailOAuthService = new GmailOAuthService();

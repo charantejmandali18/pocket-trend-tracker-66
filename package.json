@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "build": "npm run copy-pdf-worker && vite build",
+    "build:dev": "npm run copy-pdf-worker && vite build --mode development",
+    "copy-pdf-worker": "mkdir -p public/workers && cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/workers/pdf.worker.min.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -51,6 +52,8 @@
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
     "node-fetch": "^3.3.2",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.4.54",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",

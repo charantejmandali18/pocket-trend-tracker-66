@@ -48,6 +48,8 @@ import {
   type GroupMembership
 } from '@/utils/dataStorage';
 import { useGmailOAuth } from '@/hooks/useGmailOAuth';
+import CreditReportUpload from '@/components/CreditReportUpload';
+import { creditReportParser, type CreditReportAccount } from '@/services/creditReportParser';
 
 const Profile = () => {
   const { user, userGroups, isPersonalMode, currentGroup } = useApp();
@@ -87,7 +89,8 @@ const Profile = () => {
     syncEmails,
     reprocessData,
     resetSyncTime,
-    processAccount
+    processAccount,
+    addCreditReportAccounts
   } = useGmailOAuth();
 
   useEffect(() => {
@@ -191,6 +194,34 @@ const Profile = () => {
       toast({
         title: "Coming Soon",
         description: `${provider} integration will be available soon`,
+      });
+    }
+  };
+
+  // Handle credit report account extraction
+  const handleCreditReportAccounts = async (accounts: CreditReportAccount[]) => {
+    if (!user) return;
+
+    try {
+      // Convert credit report accounts to the format expected by the service
+      const accountsToAdd = accounts.map(account => ({
+        bank_name: account.bankName,
+        account_type: account.accountType,
+        account_number_partial: account.accountNumber.slice(-4),
+        balance: account.balance,
+        credit_limit: account.creditLimit,
+        open_date: account.openDate,
+        confidence_score: account.confidenceScore,
+        raw_data: account.rawText
+      }));
+
+      await addCreditReportAccounts(accountsToAdd);
+    } catch (error) {
+      console.error('Error handling credit report accounts:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add credit report accounts",
+        variant: "destructive",
       });
     }
   };
@@ -325,6 +356,7 @@ const Profile = () => {
         <TabsList>
           <TabsTrigger value="email-auth">Email Integration</TabsTrigger>
           <TabsTrigger value="unprocessed">Unprocessed Accounts</TabsTrigger>
+          <TabsTrigger value="credit-report">Import Credit Report</TabsTrigger>
           <TabsTrigger value="groups">My Groups</TabsTrigger>
           <TabsTrigger value="mappings">Email Mappings</TabsTrigger>
           <TabsTrigger value="data">Data Management</TabsTrigger>
@@ -523,7 +555,7 @@ const Profile = () => {
                 Unprocessed Accounts ({unprocessedAccounts.length})
               </CardTitle>
               <p className="text-sm text-gray-500">
-                These accounts were discovered from your emails but need manual review before adding
+                These accounts were discovered from your emails and credit reports but need manual review before adding
               </p>
             </CardHeader>
             <CardContent>
@@ -593,6 +625,13 @@ const Profile = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="credit-report" className="space-y-4">
+          <CreditReportUpload 
+            onAccountsExtracted={handleCreditReportAccounts}
+            isUploading={isLoading}
+          />
         </TabsContent>
 
         <TabsContent value="groups" className="space-y-4">

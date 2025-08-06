@@ -417,6 +417,50 @@ export const useGmailOAuth = () => {
     }
   };
 
+  // Add credit report accounts to unprocessed queue
+  const addCreditReportAccounts = async (accounts: Array<{
+    bank_name: string;
+    account_type: string;
+    account_number_partial: string;
+    balance?: number;
+    credit_limit?: number;
+    open_date?: string;
+    confidence_score: number;
+    raw_data?: string;
+  }>) => {
+    if (!user) return false;
+
+    try {
+      const success = await gmailOAuthService.addCreditReportAccounts(user.id, accounts);
+      
+      if (success) {
+        toast({
+          title: "Accounts Added",
+          description: `${accounts.length} accounts added to unprocessed queue`,
+        });
+        
+        // Reload unprocessed accounts to show the new ones
+        await loadUnprocessedAccounts();
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to add credit report accounts",
+          variant: "destructive",
+        });
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('Error adding credit report accounts:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add credit report accounts",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   return {
     connectedEmails,
     unprocessedAccounts,
@@ -428,6 +472,7 @@ export const useGmailOAuth = () => {
     reprocessData,
     resetSyncTime,
     processAccount,
+    addCreditReportAccounts,
     refreshData: () => {
       loadEmailIntegrations();
       loadUnprocessedAccounts();
