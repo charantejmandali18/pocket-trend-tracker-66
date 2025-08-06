@@ -196,8 +196,236 @@ export const getStoredTransactions = async (): Promise<StoredTransaction[]> => {
   }
 };
 
+// Helper function to automatically update account balance when a transaction is processed
+const updateAccountBalanceForTransaction = async (transaction: StoredTransaction): Promise<void> => {
+  try {
+    console.log('🏦 Updating account balance for transaction:', {
+      amount: transaction.amount,
+      type: transaction.transaction_type,
+      account: transaction.account_name
+    });
+
+    if (!transaction.account_name) {
+      console.log('❌ No account name provided, skipping balance update');
+      return;
+    }
+
+    // Extract bank name and account number from account_name (format: "Bank Name ****1234")
+    const accountParts = transaction.account_name.match(/^(.+?)\s+\*{4}(\d{4})$/);
+    let bankName: string | null = null;
+    let accountNumber: string | null = null;
+
+    if (accountParts) {
+      bankName = accountParts[1].trim();
+      accountNumber = accountParts[2];
+    } else {
+      // Fallback: treat the entire account_name as bank name
+      bankName = transaction.account_name;
+    }
+
+    console.log('🔍 Parsed account info:', { bankName, accountNumber });
+
+    // Find matching accounts in both the accounts table and discovered_accounts table
+    let accountsToUpdate: any[] = [];
+
+    // 1. Check main accounts table first
+    const accountsQuery = supabase
+      .from('accounts')
+      .select('id, account_type, balance')
+      .eq('user_id', transaction.user_id)
+      .eq('is_active', true);
+
+    if (accountNumber) {
+      accountsQuery.ilike('account_number', `%${accountNumber}%`);
+    }
+    if (bankName) {
+      accountsQuery.ilike('bank_name', `%${bankName}%`);
+    }
+
+    const { data: accounts, error: accountsError } = await accountsQuery;
+    
+    if (!accountsError && accounts && accounts.length > 0) {
+      accountsToUpdate = accounts.map(acc => ({ ...acc, table: 'accounts' }));
+    }
+
+    // 2. If no matches in accounts, check discovered_accounts table
+    if (accountsToUpdate.length === 0) {
+      const discoveredQuery = supabase
+        .from('discovered_accounts')
+        .select('id, account_type, current_balance')
+        .eq('user_id', transaction.user_id)
+        .eq('status', 'approved');
+
+      if (accountNumber) {
+        discoveredQuery.ilike('account_number_partial', accountNumber);
+      }
+      if (bankName) {
+        discoveredQuery.ilike('bank_name', `%${bankName}%`);
+      }
+
+      const { data: discoveredAccounts, error: discoveredError } = await discoveredQuery;
+      
+      if (!discoveredError && discoveredAccounts && discoveredAccounts.length > 0) {
+        accountsToUpdate = discoveredAccounts.map(acc => ({ 
+          ...acc, 
+          table: 'discovered_accounts',
+          balance: acc.current_balance 
+        }));
+      }
+    }
+
+    if (accountsToUpdate.length === 0) {
+      console.log('⚠️ No matching accounts found for balance update');
+      
+      // Edge case: Create a discovered account entry for future matching
+      if (bankName && accountNumber) {
+        console.log('🔄 Creating discovered account entry for future transactions');
+        try {
+          const { error: createError } = await supabase
+            .from('discovered_accounts')
+            .insert({
+              user_id: transaction.user_id,
+              bank_name: bankName,
+              account_number_partial: accountNumber,
+              account_type: 'bank', // Default assumption
+              current_balance: transaction.transaction_type === 'credit' ? transaction.amount : -transaction.amount,
+              discovery_method: 'transaction_processing',
+              status: 'pending',
+              confidence_score: 0.7,
+              discovery_notes: `Auto-created from transaction: ${transaction.description}`
+            });
+
+          if (!createError) {
+            console.log('✅ Created discovered account entry for future matching');
+          }
+        } catch (error) {
+          console.error('❌ Failed to create discovered account:', error);
+        }
+      }
+      
+      return;
+    }
+
+    // 3. Update balances for all matching accounts
+    for (const account of accountsToUpdate) {
+      try {
+        const currentBalance = parseFloat(account.balance || '0');
+        let newBalance = currentBalance;
+
+        // Calculate new balance based on transaction type and account type
+        if (transaction.transaction_type === 'credit') {
+          // Money coming IN (positive)
+          if (['bank', 'savings', 'checking', 'wallet', 'cash'].includes(account.account_type)) {
+            newBalance = currentBalance + transaction.amount; // Add to asset accounts
+          } else if (account.account_type === 'credit_card') {
+            newBalance = currentBalance - transaction.amount; // Reduce credit card debt
+          }
+        } else if (transaction.transaction_type === 'debit') {
+          // Money going OUT (negative)
+          if (['bank', 'savings', 'checking', 'wallet', 'cash'].includes(account.account_type)) {
+            newBalance = currentBalance - transaction.amount; // Subtract from asset accounts
+          } else if (account.account_type === 'credit_card') {
+            newBalance = currentBalance + transaction.amount; // Increase credit card debt
+          }
+        }
+
+        // Validate balance constraints
+        let shouldUpdate = true;
+        let warningMessage = '';
+
+        // Warn about negative balances in asset accounts (but don't prevent the update)
+        if (['bank', 'savings', 'checking', 'wallet', 'cash'].includes(account.account_type) && newBalance < 0) {
+          warningMessage = `⚠️ Warning: Account will have negative balance: ${newBalance}`;
+          console.warn(warningMessage);
+          // Still allow the update but log a warning
+        }
+
+        // Prevent extremely large negative balances (potential data error)
+        if (newBalance < -1000000) { // 10 lakh rupees negative
+          console.error(`❌ Preventing extreme negative balance: ${newBalance}`);
+          shouldUpdate = false;
+        }
+
+        console.log('💰 Balance update:', {
+          account: account.id,
+          accountType: account.account_type,
+          currentBalance,
+          transactionAmount: transaction.amount,
+          transactionType: transaction.transaction_type,
+          newBalance,
+          table: account.table,
+          shouldUpdate,
+          warning: warningMessage || 'None'
+        });
+
+        if (!shouldUpdate) {
+          console.log('❌ Skipping balance update due to validation failure');
+          continue;
+        }
+
+        // Update the appropriate table
+        if (account.table === 'accounts') {
+          const { error: updateError } = await supabase
+            .from('accounts')
+            .update({ balance: newBalance.toString() })
+            .eq('id', account.id);
+
+          if (updateError) {
+            console.error('❌ Error updating account balance:', updateError);
+          } else {
+            console.log('✅ Successfully updated account balance');
+          }
+        } else if (account.table === 'discovered_accounts') {
+          const { error: updateError } = await supabase
+            .from('discovered_accounts')
+            .update({ current_balance: newBalance.toString() })
+            .eq('id', account.id);
+
+          if (updateError) {
+            console.error('❌ Error updating discovered account balance:', updateError);
+          } else {
+            console.log('✅ Successfully updated discovered account balance');
+          }
+        }
+
+      } catch (error) {
+        console.error('❌ Error updating individual account balance:', error);
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error in updateAccountBalanceForTransaction:', error);
+    // Don't throw here - balance update failure shouldn't break transaction creation
+  }
+};
+
 export const addStoredTransaction = async (transaction: Omit<StoredTransaction, 'id' | 'created_at' | 'updated_at'>): Promise<StoredTransaction | null> => {
   try {
+    // First check if a similar transaction already exists to prevent duplicates
+    const { data: existingTransactions, error: checkError } = await supabase
+      .from('transactions')
+      .select('id')
+      .eq('user_id', transaction.user_id)
+      .eq('amount', transaction.amount)
+      .eq('transaction_date', transaction.transaction_date)
+      .eq('description', transaction.description)
+      .eq('account_name', transaction.account_name || '')
+      .limit(1);
+
+    if (checkError) {
+      console.warn('Error checking for duplicate transactions:', checkError);
+    }
+
+    // If a duplicate exists, return null (or optionally return the existing transaction)
+    if (existingTransactions && existingTransactions.length > 0) {
+      console.log('Duplicate transaction detected, skipping insertion:', {
+        amount: transaction.amount,
+        date: transaction.transaction_date,
+        description: transaction.description
+      });
+      return null;
+    }
+
     const { data, error } = await supabase
       .from('transactions')
       .insert({
@@ -222,6 +450,9 @@ export const addStoredTransaction = async (transaction: Omit<StoredTransaction, 
     // Map transaction type back to UI terminology
     if (data) {
       data.transaction_type = mapTransactionTypeFromDb(data.transaction_type);
+      
+      // Automatically update account balance after successful transaction creation
+      await updateAccountBalanceForTransaction(data);
     }
     
     return data;
@@ -231,8 +462,49 @@ export const addStoredTransaction = async (transaction: Omit<StoredTransaction, 
   }
 };
 
+// Batch insert transactions with duplicate prevention
+export const addStoredTransactionsBatch = async (transactions: Array<Omit<StoredTransaction, 'id' | 'created_at' | 'updated_at'>>): Promise<StoredTransaction[]> => {
+  try {
+    const successfulInserts: StoredTransaction[] = [];
+    
+    // Process in smaller batches to avoid overwhelming the database
+    const batchSize = 10;
+    for (let i = 0; i < transactions.length; i += batchSize) {
+      const batch = transactions.slice(i, i + batchSize);
+      
+      for (const transaction of batch) {
+        const result = await addStoredTransaction(transaction);
+        if (result) {
+          successfulInserts.push(result);
+          // Note: Balance updates are already handled in addStoredTransaction
+        }
+      }
+      
+      // Small delay between batches to be nice to the database
+      if (i + batchSize < transactions.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    console.log(`Successfully inserted ${successfulInserts.length} out of ${transactions.length} transactions (duplicates skipped)`);
+    return successfulInserts;
+  } catch (error) {
+    console.error('Error in batch transaction insert:', error);
+    return [];
+  }
+};
+
 export const updateStoredTransaction = async (transactionId: string, updates: Partial<StoredTransaction>): Promise<boolean> => {
   try {
+    // Get the original transaction first to reverse its balance effect
+    const { data: originalTransaction, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
     // Map transaction type to database terminology if it exists in updates
     const mappedUpdates = { ...updates };
     if (mappedUpdates.transaction_type) {
@@ -245,6 +517,89 @@ export const updateStoredTransaction = async (transactionId: string, updates: Pa
       .eq('id', transactionId);
 
     if (error) throw error;
+
+    // Handle balance updates for transaction changes
+    if (originalTransaction) {
+      // Check if any balance-affecting fields changed
+      const amountChanged = updates.amount !== undefined && updates.amount !== originalTransaction.amount;
+      const accountChanged = updates.account_name !== undefined && updates.account_name !== originalTransaction.account_name;
+      const typeChanged = updates.transaction_type !== undefined && mapTransactionTypeToDb(updates.transaction_type) !== originalTransaction.transaction_type;
+
+      if (amountChanged || accountChanged || typeChanged) {
+        console.log('🔄 Transaction update requires balance adjustment:', {
+          amountChanged: amountChanged ? `${originalTransaction.amount} → ${updates.amount}` : false,
+          accountChanged: accountChanged ? `${originalTransaction.account_name} → ${updates.account_name}` : false,
+          typeChanged: typeChanged ? `${originalTransaction.transaction_type} → ${updates.transaction_type}` : false
+        });
+        
+        // Method 1: If account changed, handle old and new accounts separately
+        if (accountChanged) {
+          // Reverse the effect on the old account
+          const reverseTransaction = {
+            ...originalTransaction,
+            transaction_type: originalTransaction.transaction_type === 'income' ? 'expense' : 'income',
+          };
+          
+          await updateAccountBalanceForTransaction({
+            ...reverseTransaction,
+            transaction_type: mapTransactionTypeFromDb(reverseTransaction.transaction_type)
+          } as StoredTransaction);
+
+          // Apply the new effect to the new account
+          const newTransaction = {
+            ...originalTransaction,
+            ...updates,
+            transaction_type: mappedUpdates.transaction_type || originalTransaction.transaction_type
+          };
+          
+          await updateAccountBalanceForTransaction({
+            ...newTransaction,
+            transaction_type: mapTransactionTypeFromDb(newTransaction.transaction_type)
+          } as StoredTransaction);
+        }
+        // Method 2: If only amount or type changed (same account), calculate the difference
+        else {
+          const oldAmount = originalTransaction.amount;
+          const newAmount = updates.amount !== undefined ? updates.amount : originalTransaction.amount;
+          const oldType = originalTransaction.transaction_type;
+          const newType = mappedUpdates.transaction_type || originalTransaction.transaction_type;
+          
+          console.log('📊 Calculating balance difference:', {
+            oldAmount,
+            newAmount,
+            oldType: mapTransactionTypeFromDb(oldType),
+            newType: mapTransactionTypeFromDb(newType)
+          });
+
+          // Calculate the net effect difference
+          let balanceDifference = 0;
+          
+          // Convert old transaction effect to a number (positive = increase balance, negative = decrease balance)
+          const oldEffect = oldType === 'income' ? oldAmount : -oldAmount;
+          // Convert new transaction effect to a number
+          const newEffect = newType === 'income' ? newAmount : -newAmount;
+          
+          balanceDifference = newEffect - oldEffect;
+          
+          console.log('💰 Net balance difference to apply:', balanceDifference);
+
+          if (balanceDifference !== 0) {
+            // Create a difference transaction to apply the net change
+            const differenceTransaction = {
+              ...originalTransaction,
+              amount: Math.abs(balanceDifference),
+              transaction_type: balanceDifference > 0 ? 'income' : 'expense'
+            };
+
+            await updateAccountBalanceForTransaction({
+              ...differenceTransaction,
+              transaction_type: mapTransactionTypeFromDb(differenceTransaction.transaction_type)
+            } as StoredTransaction);
+          }
+        }
+      }
+    }
+
     return true;
   } catch (error) {
     console.error('Error updating transaction:', error);
@@ -254,12 +609,39 @@ export const updateStoredTransaction = async (transactionId: string, updates: Pa
 
 export const deleteStoredTransaction = async (transactionId: string): Promise<boolean> => {
   try {
+    // Get the transaction first to reverse its balance effect
+    const { data: transactionToDelete, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Delete the transaction
     const { error } = await supabase
       .from('transactions')
       .delete()
       .eq('id', transactionId);
 
     if (error) throw error;
+
+    // Reverse the balance effect of the deleted transaction
+    if (transactionToDelete) {
+      console.log('🔄 Reversing balance effect of deleted transaction');
+      
+      // Create a reverse transaction to undo the balance effect
+      const reverseTransaction = {
+        ...transactionToDelete,
+        transaction_type: transactionToDelete.transaction_type === 'income' ? 'expense' : 'income',
+      };
+      
+      await updateAccountBalanceForTransaction({
+        ...reverseTransaction,
+        transaction_type: mapTransactionTypeFromDb(reverseTransaction.transaction_type)
+      } as StoredTransaction);
+    }
+
     return true;
   } catch (error) {
     console.error('Error deleting transaction:', error);
@@ -904,6 +1286,41 @@ export const addFinancialAccount = async (account: any) => {
     const dbAccountType = mapAccountTypeToDatabase(uiAccountType);
     
     console.log('Account type mapping:', { uiType: uiAccountType, dbType: dbAccountType });
+
+    // Check for duplicate accounts before inserting
+    const duplicateFilters = [
+      supabase.from('accounts').select('id').eq('user_id', user.id).eq('name', account.name).eq('is_active', true)
+    ];
+
+    // If we have bank name and account number, also check by those
+    if (account.bank_name && account.account_number) {
+      duplicateFilters.push(
+        supabase.from('accounts').select('id')
+          .eq('user_id', user.id)
+          .eq('bank_name', account.bank_name)
+          .eq('account_number_masked', account.account_number)
+          .eq('is_active', true)
+      );
+    }
+
+    // Check for duplicates
+    for (const filter of duplicateFilters) {
+      const { data: existingAccounts, error: checkError } = await filter.limit(1);
+      
+      if (checkError) {
+        console.warn('Error checking for duplicate accounts:', checkError);
+        continue;
+      }
+
+      if (existingAccounts && existingAccounts.length > 0) {
+        console.log('Duplicate account detected, skipping insertion:', {
+          name: account.name,
+          bank_name: account.bank_name,
+          account_number: account.account_number
+        });
+        return null;
+      }
+    }
 
     const insertData = {
       user_id: user.id,
