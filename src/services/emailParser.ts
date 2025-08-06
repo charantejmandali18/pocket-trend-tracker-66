@@ -480,31 +480,49 @@ class EmailParsingService {
       }
     }
 
-    // Extract merchant/description - prioritize body content
+    // Extract merchant/description - prioritize UPI transaction info
     let description = subject; // Default to subject
-    const merchantPatterns = [
-      /(?:at|to)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-      /merchant[:\s]+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-      /transaction\s+(?:at|with)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-      /payment\s+(?:to|at)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
-    ];
+    let merchant = undefined;
     
-    // First try to extract from body
-    for (const pattern of merchantPatterns) {
-      const match = bodyText.match(pattern);
-      if (match && match[1].trim().length > 2) {
-        description = match[1].trim();
-        break;
-      }
+    // First, try to extract UPI transaction info (most reliable for merchant info)
+    const upiPattern = /transaction\s+info:\s*(upi\/[^:\s]+\/[^\/]+\/([^\/\s]+))/i;
+    let upiMatch = bodyText.match(upiPattern);
+    if (!upiMatch) {
+      upiMatch = subject.match(upiPattern);
     }
     
-    // If no good match in body, try subject
-    if (description === subject) {
+    if (upiMatch) {
+      description = upiMatch[1].trim(); // Full UPI transaction info
+      merchant = upiMatch[2].trim(); // Just the merchant name
+      console.log('🏪 Extracted UPI info:', { description, merchant });
+    } else {
+      // Fallback to other merchant patterns
+      const merchantPatterns = [
+        /(?:at|to)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+        /merchant[:\s]+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+        /transaction\s+(?:at|with)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+        /payment\s+(?:to|at)\s+([A-Z\s&]+?)(?:\s+on|\s+\d|\s*$)/i,
+      ];
+      
+      // Try to extract from body
       for (const pattern of merchantPatterns) {
-        const match = subject.match(pattern);
+        const match = bodyText.match(pattern);
         if (match && match[1].trim().length > 2) {
           description = match[1].trim();
+          merchant = match[1].trim();
           break;
+        }
+      }
+      
+      // If no good match in body, try subject
+      if (description === subject) {
+        for (const pattern of merchantPatterns) {
+          const match = subject.match(pattern);
+          if (match && match[1].trim().length > 2) {
+            description = match[1].trim();
+            merchant = match[1].trim();
+            break;
+          }
         }
       }
     }
@@ -525,9 +543,9 @@ class EmailParsingService {
       currency: 'INR',
       accountPartial,
       bankName,
-      description: description.substring(0, 50) + '...',
-      confidence,
-      merchant: description !== subject ? description.substring(0, 30) + '...' : 'None'
+      description: description.length > 50 ? description.substring(0, 50) + '...' : description,
+      merchant: merchant || 'None extracted',
+      confidence
     });
     
     return {
@@ -541,7 +559,7 @@ class EmailParsingService {
       currency: 'INR',
       transaction_date: this.extractTransactionDate(bodyText) || this.extractTransactionDate(subject) || date,
       description,
-      merchant: description !== subject ? description : undefined,
+      merchant: merchant,
       category,
       account_info: {
         bank_name: bankName || undefined,
