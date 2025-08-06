@@ -567,6 +567,60 @@ class GmailOAuthService {
     }
   }
 
+  // Get or create a special integration ID for credit report uploads
+  private async getOrCreateCreditReportIntegration(userId: string): Promise<string> {
+    try {
+      // First, try to use an existing email integration for this user
+      const { data: existingIntegrations, error: fetchError } = await supabase
+        .from('email_integrations')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('status', 'connected')
+        .limit(1);
+
+      if (!fetchError && existingIntegrations && existingIntegrations.length > 0) {
+        return existingIntegrations[0].id;
+      }
+
+      // If no existing integration, create a special gmail integration for credit reports
+      const { data: newIntegration, error: insertError } = await supabase
+        .from('email_integrations')
+        .insert({
+          user_id: userId,
+          provider: 'gmail',
+          email: `credit-report-${userId}@placeholder.local`,
+          access_token: 'credit_report_placeholder_token',
+          status: 'connected',
+          transactions_processed: 0,
+          accounts_discovered: 0,
+          scope: 'credit_report_upload'
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      return newIntegration.id;
+    } catch (error) {
+      console.error('Error creating credit report integration:', error);
+      // Last resort fallback: try to find any integration for this user
+      const { data: anyIntegration } = await supabase
+        .from('email_integrations')
+        .select('id')
+        .eq('user_id', userId)
+        .limit(1);
+        
+      if (anyIntegration && anyIntegration.length > 0) {
+        return anyIntegration[0].id;
+      }
+      
+      // If all else fails, throw an error - this shouldn't happen in normal operation
+      throw new Error('Unable to create or find email integration for credit report uploads');
+    }
+  }
+
   // Add credit report accounts to unprocessed accounts
   async addCreditReportAccounts(
     userId: string,
@@ -582,22 +636,20 @@ class GmailOAuthService {
     }>
   ): Promise<boolean> {
     try {
+      // Create or get a special integration ID for credit reports
+      const creditReportIntegrationId = await this.getOrCreateCreditReportIntegration(userId);
+      
       const accountsToInsert = accounts.map(account => ({
         user_id: userId,
-        email_integration_id: null, // Credit report uploads don't have email integration
-        discovered_account_name: `${account.bank_name} - ${account.account_type}`,
+        email_integration_id: creditReportIntegrationId,
+        discovered_from_email_id: `credit-report-${Date.now()}`, // Placeholder email ID for credit reports
         bank_name: account.bank_name,
         account_type: account.account_type,
         current_balance: account.balance,
         account_number_partial: account.account_number_partial,
         confidence_score: account.confidence_score,
         needs_review: account.confidence_score < 0.8,
-        status: 'pending' as const,
-        discovery_date: new Date().toISOString(),
-        discovery_notes: `Imported from credit report - Confidence: ${Math.round(account.confidence_score * 100)}%`,
-        raw_data: account.raw_data,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        status: 'pending' as const
       }));
 
       const { error } = await supabase

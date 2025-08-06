@@ -1,0 +1,2932 @@
+=== PAGE 1 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+   
+CURRENT APPLICATION INFORMATION
+   These are the details you give us when you apply for your Experian Credit Report.
+Name
+Harshavardhan Mandali
+Mobile Phone
+8555849483
+Telephone
+ -
+Passport Number  -
+PAN
+ASZPH5641K
+Email
+harshavardhanmandali901@gmail.com
+Voter ID
+ -
+Driving License
+ -
+ 
+ 
+Aadhaar Number
+ -
+Ration Card
+ -
+ 
+   
+EXPERIAN CREDIT SCORE
+   Your Experian Credit Report is summarized in the form of Experian Credit Score which ranges from 300 - 900.
+791
+Score Factors
+1.
+Recency :
+Recent Credit Account Defaults
+2.
+Leverage :
+Credit Accounts with on-time re-payment history
+3.
+Coverage :
+Non-delinquent and delinquent Credit Accounts
+4.
+Delinquency Status :
+Defaults on Credit Accounts (current & recent periodic intervals)
+ 
+ 
+   
+REPORT SUMMARY
+Credit Account Summary
+Current Balance Amount Summary
+Credit Enquiry Summary
+Total number of Accounts
+14
+Total Current Bal. amt
+28,51,923
+Last 7 days credit enquiries
+0
+Active Accounts
+5
+SF/WD/WO/Settled amt
+0
+Last 30 days credit enquiries
+0
+Closed Accounts
+9
+Secured Accounts amt
+27,07,389
+Last 90 days credit enquiries
+0
+CC/CO
+-
+Unsecured Accounts amt
+1,44,534
+Last 180 days credit enquiries
+0
+ 
+Experian Credit Report
+Experian Report Number (ERN): 1754457067441   
+Unique Transaction ID: 1903218511   
+Report Created: 06-08-2025   
+ © Experian Ltd, 2025. All rights reserved.
+Page 1 of 14
+ 
+
+
+=== PAGE 2 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+   
+SUMMARY: CREDIT ACCOUNT INFORMATION
+   This section displays summary of all your reported credit accounts found in the Experian Credit Bureau database.
+ 
+Lender
+Account type
+Account No
+Ownership
+Date Reported
+Account
+Status
+Date Opened
+Sanction Amt /
+Highest Credit
+Current
+Balance
+Amount
+Overdue
+Acct 1
+CapFloat Financial
+Services Pvt Ltd
+PERSONAL
+LOAN
+HYD18E000331155
+Individual
+30-04-2024
+CLOSED
+20181227
+10,301
+0
+0
+Acct 2
+DMI Finance Private
+Limited
+CONSUMER
+LOAN
+DMI0001063482
+Individual
+28-02-2023
+CLOSED
+20180920
+80,175
+0
+0
+Acct 3
+DMI Finance Private
+Limited
+PERSONAL
+LOAN
+DMI0001581843
+Individual
+28-02-2023
+CLOSED
+20190101
+42,500
+0
+0
+Acct 4
+HDFC Bank Ltd
+CREDIT
+CARDS
+0001014550017423324 Individual
+15-07-2025
+CLOSED
+20190904
+26,602
+0
+-
+Acct 5
+Clix Capital Services
+Private Limited
+CONSUMER
+LOAN
+804002175251
+Individual
+31-03-2023
+CLOSED
+20190401
+2,500
+0
+0
+Acct 6
+Clix Capital Services
+Private Limited
+PERSONAL
+LOAN
+PYTMBL1177078
+Individual
+23-04-2020
+CLOSED
+20200204
+35,000
+0
+0
+Acct 7
+Clix Capital Services
+Private Limited
+PERSONAL
+LOAN
+PYTMBLM1177078
+Individual
+31-10-2021
+CLOSED
+20200423
+35,000
+0
+0
+Acct 8
+HDFC Bank Ltd
+PERSONAL
+LOAN
+129590204
+Individual
+22-07-2025
+ACTIVE
+20220505
+3,95,000
+97,821
+0
+Acct 9
+The South Indian Bank
+Ltd
+CREDIT
+CARDS
+2770045748241237154 Individual
+15-07-2025
+ACTIVE
+20220705
+91,248
+20,711
+0
+Acct 10
+IDFC FIRST BANK
+LIMITED
+TWO
+WHEELER
+LOAN
+84803103
+Individual
+30-09-2024
+CLOSED
+20220818
+1,44,099
+0
+0
+Acct 11
+HDFC Bank Ltd
+CREDIT
+CARDS
+0001010430000026372 Individual
+15-07-2025
+ACTIVE
+20221201
+27,094
+8,144
+-
+Acct 12
+Axis Bank
+CREDIT
+CARDS
+1720000002737184
+Individual
+15-07-2025
+ACTIVE
+20240302
+17,858
+17,858
+0
+Acct 13
+Snapmint Financial
+Services Pvt Ltd
+CONSUMER
+LOAN
+2784920110202406
+Individual
+31-05-2025
+CLOSED
+20241005
+9,469
+0
+0
+Acct 14
+State Bank of India
+HOME LOAN
+00000043743565070
+Individual
+31-07-2025
+ACTIVE
+20250123
+2,40,00,000
+27,07,389
+-
+ 
+   
+CREDIT ACCOUNT INFORMATION DETAILS
+This section has information based on the details provided to Experian by all our member banks, credit / financial institutions and other credit grantors with whom you have a credit / loan account.
+PERSONAL LOAN
+CapFloat Financial Services Pvt Ltd
+ 
+ Acct 1
+Mandali Harshavardhan
+Address 1
+FLAT NO 408 ORCHID BLOCK GMR TOWNSHIP SHAMSHABAD 500033
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+HYD18E000331155
+Date Reported
+20240430
+Credit Limit Amt
+ -
+Date Opened
+27-12-2018
+Loan Type
+PERSONAL
+LOAN
+EMI
+ -
+Date Closed
+30-04-2024
+Account Status
+CLOSED
+Repayment Tenure
+0
+Ownership
+Individual
+Sanctioned Amt
+10,301
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+-
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 2 of 14
+ 
+
+
+=== PAGE 3 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2024
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+0
+0
+0
+0
+2023
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2022
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2021
+0
+0
+0
+0
+0
+0
+0
+0
+0
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhanmandali901@gmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+-
+-
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+CONSUMER LOAN
+DMI Finance Private Limited
+ 
+ Acct 2
+Mandail Harshavardhan
+Address 1
+ROOM NO -305,PUNJAB PG JALANDHAR PUNJAB Punjab 144411
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+DMI0001063482
+Date Reported
+20230228
+Credit Limit Amt
+ -
+Date Opened
+20-09-2018
+Loan Type
+CONSUMER
+LOAN
+EMI
+ -
+Date Closed
+30-09-2022
+Account Status
+CLOSED
+Repayment Tenure
+0
+Ownership
+Individual
+Sanctioned Amt
+80,175
+Total Write-off Amt
+0
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+0
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+0
+Type of Collateral
+-
+Last Payment Date
+10-08-2022
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2023
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+0
+0
+2022
+0
+0
+0
+0
+0
+16
+15
+0
+0
+0
+ 
+0
+2021
+0
+ 
+ 
+0
+S
+0
+ 
+0
+0
+0
+S
+0
+2020
+0
+0
+0
+ 
+S
+0
+0
+0
+0
+0
+ 
+ 
+   Consumer Personal details on the Credit Account
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 3 of 14
+ 
+
+
+=== PAGE 4 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+Date of Birth
+15-09-1998
+Gender
+Male
+Occupation
+-
+Email address
+-
+Phone Type
+Phone Number Extension
+Mobile
+-
+-
+-
+-
+Phone Type
+Phone Number Extension
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+PERSONAL LOAN
+DMI Finance Private Limited
+ 
+ Acct 3
+Mandail Harshavardhan
+Address 1
+FLAT NO 408 ORCHID, GMR TOWN SHIP, MAMID IPALLY, SAROOR NAGAR, RANGAREDDI, ANDHRA PRADESH TELANGANA 500005
+Address 2
+ROOM NO -305,PUNJAB PG, JALANDHAR, 14441 1 INDIA 144411
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+DMI0001581843
+Date Reported
+20230228
+Credit Limit Amt
+ -
+Date Opened
+01-01-2019
+Loan Type
+PERSONAL
+LOAN
+EMI
+ -
+Date Closed
+30-09-2022
+Account Status
+CLOSED
+Repayment Tenure
+0
+Ownership
+Individual
+Sanctioned Amt
+42,500
+Total Write-off Amt
+0
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+0
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+0
+Type of Collateral
+-
+Last Payment Date
+03-06-2019
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2023
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+0
+0
+2022
+0
+0
+0
+0
+0
+0
+ 
+0
+0
+0
+ 
+0
+2021
+0
+ 
+ 
+S
+S
+0
+ 
+ 
+ 
+ 
+ 
+ 
+2020
+ 
+ 
+0
+ 
+S
+0
+ 
+ 
+ 
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhanmandali901@gmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+-
+-
+8555849483
+Phone Type
+Phone
+Number
+Extension
+-
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 4 of 14
+ 
+
+
+=== PAGE 5 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+CREDIT CARDS
+HDFC Bank Ltd
+ 
+ Acct 4
+Harshavardhan Mandali
+Address 1
+FLAT NO 303, RK PRIME SAI BABA NAGAR COLONY KUKATPALLY 500072
+Address 2
+ROOM NO 305 PUNJAB PG LAW GATE LOVELY PROFESSIONAL UNIVERSITY Punjab 144411
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+0001014550017423324
+Date Reported
+20250715
+Credit Limit Amt
+25,000
+Date Opened
+04-09-2019
+Loan Type
+CREDIT CARDS
+EMI
+ -
+Date Closed
+23-06-2023
+Account Status
+CLOSED
+Repayment Tenure
+0
+Ownership
+Individual
+Highest Credit
+26,602
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+-
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+04-04-2023
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2025
+ 
+ 
+ 
+ 
+ 
+0
+0
+0
+0
+0
+0
+0
+2024
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2023
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+21
+2022
+0
+0
+0
+0
+0
+0
+ 
+ 
+ 
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhan.mandali@hotmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+-
+-
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+CONSUMER LOAN
+Clix Capital Services Private Limited
+ 
+ Acct 5
+Mandali Harshavardhan
+Address 1
+FLAT NO 408 ORCHID, GMR TOWN S,HIP MAMIDIPALLY,SAROOR NAGAR,HYDERABAD K.V.RANGAREDDY TS 500005 500005
+   Credit Account details
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 5 of 14
+ 
+
+
+=== PAGE 6 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+Account terms
+Account description
+Account details
+Account Number
+804002175251
+Date Reported
+20230331
+Credit Limit Amt
+ -
+Date Opened
+01-04-2019
+Loan Type
+CONSUMER
+LOAN
+EMI
+ -
+Date Closed
+24-03-2023
+Account Status
+CLOSED
+Repayment Tenure
+0
+Ownership
+Individual
+Sanctioned Amt
+2,500
+Total Write-off Amt
+0
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+0
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+0
+Type of Collateral
+-
+Last Payment Date
+24-03-2023
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+_
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2023
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+0
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhanmandali901@gmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+-
+-
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+PERSONAL LOAN
+Clix Capital Services Private Limited
+ 
+ Acct 6
+Harshavardhan Mandali
+Address 1
+B'"FLAT NO 408 ORCHID, GMR TOWN S""HIP MAMIDIPALLY"' 500005
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+PYTMBL1177078
+Date Reported
+20200423
+Credit Limit Amt
+ -
+Date Opened
+04-02-2020
+Loan Type
+PERSONAL
+LOAN
+EMI
+ -
+Date Closed
+23-04-2020
+Account Status
+CLOSED
+Repayment Tenure
+0
+Ownership
+Individual
+Sanctioned Amt
+35,000
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+-
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2020
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+0
+10
+4
+ 
+   Consumer Personal details on the Credit Account
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 6 of 14
+ 
+
+
+=== PAGE 7 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+ 
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhanmandali901@gmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+-
+-
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+PERSONAL LOAN
+Clix Capital Services Private Limited
+ 
+ Acct 7
+Mandali Harshavardhan
+Address 1
+FLAT NO 408 ORCHID, GMR TOWN SHIP MAMIDIPALLYSAROOR NAGAR 500005
+Address 2
+B'FLAT NO 408 ORCHID, GMR TOWN S HIP MAMIDIPALLY' 500005
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+PYTMBLM1177078
+Date Reported
+20211031
+Credit Limit Amt
+ -
+Date Opened
+23-04-2020
+Loan Type
+PERSONAL
+LOAN
+EMI
+ -
+Date Closed
+28-10-2021
+Account Status
+CLOSED
+Repayment Tenure
+0
+Ownership
+Individual
+Sanctioned Amt
+35,000
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+-
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2021
+ 
+ 
+0
+265
+235
+202
+172
+142
+111
+92
+61
+34
+2020
+25
+13
+9
+21
+0
+0
+0
+0
+0
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhanmandali901@gmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+-
+-
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+PERSONAL LOAN
+HDFC Bank Ltd
+ 
+ Acct 8
+Mandali Harshavardhan
+Address 1
+FLAT NO 303, RK PRIME SAI BABA NAGAR COLONY KUKATPALLY Telangana 500072
+Address 2
+FLAT NO 303 RK PRIME SAI BABA NAGAR COLONY KUKATPALLY NEAR MARUTHI WAVE BRIDGE 500072
+   Credit Account details
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 7 of 14
+ 
+
+
+=== PAGE 8 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+Account terms
+Account description
+Account details
+Account Number
+129590204
+Date Reported
+20250722
+Credit Limit Amt
+ -
+Date Opened
+05-05-2022
+Loan Type
+PERSONAL
+LOAN
+EMI
+ -
+Date Closed
+-
+Account Status
+ACTIVE
+Repayment Tenure
+0
+Ownership
+Individual
+Sanctioned Amt
+3,95,000
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+97,821
+Principal Write-off
+-
+Value of Collateral
+0
+Amount Overdue
+0
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+07-07-2025
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2025
+ 
+ 
+ 
+ 
+ 
+0
+0
+0
+0
+0
+0
+0
+2024
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2023
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2022
+0
+0
+0
+0
+0
+0
+ 
+ 
+ 
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhanmandali901@gmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+-
+-
+8555849483
+Phone Type
+Phone
+Number
+Extension
+Home
+Phone
+8555849483 -
+Office
+phone
+8555849483 -
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+CREDIT CARDS
+The South Indian Bank Ltd
+ 
+ Acct 9
+Harshavardhan Mandali
+Address 1
+FLAT NO.303 RK PRIME KUKATPALLY 500072
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+2770045748241237154
+Date Reported
+20250715
+Credit Limit Amt
+90,000
+Date Opened
+05-07-2022
+Loan Type
+CREDIT CARDS
+EMI
+ -
+Date Closed
+-
+Account Status
+ACTIVE
+Repayment Tenure
+0
+Ownership
+Individual
+Highest Credit
+91,248
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+20,711
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+-
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 8 of 14
+ 
+
+
+=== PAGE 9 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2025
+ 
+ 
+ 
+ 
+ 
+0
+0
+0
+0
+0
+0
+0
+2024
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2023
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2022
+0
+0
+0
+0
+0
+0
+ 
+ 
+ 
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhanmandali901@gmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+-
+-
+8555849483
+Phone Type
+Phone
+Number
+Extension
+-
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+TWO WHEELER LOAN
+IDFC FIRST BANK LIMITED
+ 
+ Acct 10
+Harshavardhan Mandali
+Address 1
+FLAT NO 303 PNO 109/A RK PRIME SAI BABA NAGAR COLONY HYDERABAD KUKATPALLY MEDCHAL MALKAJGIRI 2663 TELANGANA
+500072
+Address 2
+FLAT NO 303 PNO 109/A RK PRIME SAI BABA NAGAR COLONY HYDERABAD KUKATPALLY MEDCHAL MALKAJGIRI 2663 TELANGANA
+Telangana 500072
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+84803103
+Date Reported
+20240930
+Credit Limit Amt
+ -
+Date Opened
+18-08-2022
+Loan Type
+TWO
+WHEELER
+LOAN
+EMI
+ -
+Date Closed
+11-09-2024
+Account Status
+CLOSED
+Repayment Tenure
+24
+Ownership
+Individual
+Sanctioned Amt
+1,44,099
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+03-09-2024
+ 
+ 
+SuitFiled Willful Default
+No Suit filed
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2024
+ 
+ 
+ 
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2023
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2022
+0
+0
+0
+0
+0
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 9 of 14
+ 
+
+
+=== PAGE 10 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation
+-
+Email
+address
+Shddya.786@gmail.com
+Phone Type
+Phone Number
+Extension
+Mobile
+8555849483
+-
+-
+-
+Phone Type
+Phone Number
+Extension
+Mobile
+8555849483
+-
+ID Type
+ID
+Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+-
+-
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+CREDIT CARDS
+HDFC Bank Ltd
+ 
+ Acct 11
+Harshavardhan Mandali
+Address 1
+FLAT NO 303, RK PRIME SAI BABA NAGAR COLONY KUKATPALLY 500072
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+0001010430000026372
+Date Reported
+20250715
+Credit Limit Amt
+28,000
+Date Opened
+01-12-2022
+Loan Type
+CREDIT CARDS
+EMI
+ -
+Date Closed
+-
+Account Status
+ACTIVE
+Repayment Tenure
+0
+Ownership
+Individual
+Highest Credit
+27,094
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+8,144
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+-
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+09-07-2025
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2025
+ 
+ 
+ 
+ 
+ 
+0
+0
+0
+0
+0
+0
+0
+2024
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2023
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+2022
+0
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhan.mandali@hotmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+-
+-
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 10 of 14
+ 
+
+
+=== PAGE 11 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+CREDIT CARDS
+Axis Bank
+ 
+ Acct 12
+Harshavardhan Mandali
+Address 1
+CABIN 108 WORKAFELLA CYBER CROWN HITECH CITY NEAR HDFC BANK Telangana 500081
+Address 2
+FLAT NO 303 P NO 109/A R K PRIME HYDERABAD KUKATPALLY NEAR MARUTHI WEIGHT BRIDGE Telangana 500072
+Address 3
+FLAT NO 303 RK PRIME SAI BABA NAGAR COLONY KUKATPALLY Telangana 500072
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+1720000002737184
+Date Reported
+20250715
+Credit Limit Amt
+29,000
+Date Opened
+02-03-2024
+Loan Type
+CREDIT CARDS
+EMI
+ -
+Date Closed
+-
+Account Status
+ACTIVE
+Repayment Tenure
+0
+Ownership
+Individual
+Highest Credit
+17,858
+Total Write-off Amt
+0
+Rate of Interest
+-
+Current Balance
+17,858
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+-
+ 
+ 
+SuitFiled Willful Default
+No Suit filed
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2025
+ 
+ 
+ 
+ 
+ 
+0
+0
+0
+0
+0
+0
+0
+2024
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+HARSHAVARDHAN.M@OSMOSYS.CO
+Phone
+Type
+Phone Number Extension
+Mobile
+918555849483 -
+-
+-
+Phone
+Type
+Phone Number Extension
+Mobile
+918555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+CONSUMER LOAN
+Snapmint Financial Services Pvt Ltd
+ 
+ Acct 13
+Harshavardhan Mandali
+Address 1
+FLAT NO 303 PNO 109 A RK PRIME,SAI BABA NAGAR COLONY,HYDERABAD KUKATPALLY MEDCHA L MALKAJGIRI Telangana 500072
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+2784920110202406
+Date Reported
+20250531
+Credit Limit Amt
+ -
+Date Opened
+05-10-2024
+Loan Type
+CONSUMER
+LOAN
+EMI
+ -
+Date Closed
+31-05-2025
+Account Status
+CLOSED
+Repayment Tenure
+0
+Ownership
+Individual
+Sanctioned Amt
+9,469
+Total Write-off Amt
+-
+Rate of Interest
+-
+Current Balance
+0
+Principal Write-off
+-
+Value of Collateral
+-
+Amount Overdue
+0
+Settlement Amt
+-
+Type of Collateral
+-
+Last Payment Date
+28-01-2025
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 11 of 14
+ 
+
+
+=== PAGE 12 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2025
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+0
+0
+0
+0
+0
+2024
+0
+0
+0
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+harshavardhanmandali901@gmail.com
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+-
+-
+Phone Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+HOME LOAN
+State Bank of India
+ 
+ Acct 14
+Harshavardhan Mandali
+Address 1
+FLAT NO. 408, ORCHID BLOCK GMR TOWNSHIP, MAMIDIPALLY RANGAREDDI Ranga Reddy Telangana 500005
+Address 2
+FLAT NO. 408, ORCHID BLOCK GMR TOWNSHIP, MAMIDIPALLY RANGAREDDI 537:Ranga Reddy Telangana 500005
+Address 3
+HONER SIGNATIS MOOSAPET Telangana 500072
+   Credit Account details
+Account terms
+Account description
+Account details
+Account Number
+00000043743565070
+Date Reported
+20250731
+Credit Limit Amt
+ -
+Date Opened
+23-01-2025
+Loan Type
+HOME LOAN
+EMI
+ -
+Date Closed
+-
+Account Status
+ACTIVE
+Repayment Tenure
+360
+Ownership
+Individual
+Sanctioned Amt
+2,40,00,000
+Total Write-off Amt
+0
+Rate of Interest
+7.550
+Current Balance
+27,07,389
+Principal Write-off
+0
+Value of Collateral
+32092000
+Amount Overdue
+-
+Settlement Amt
+0
+Type of Collateral
+-
+Last Payment Date
+09-07-2025
+ 
+ 
+SuitFiled Willful Default
+-
+Credit Facility Status
+-
+Payment History
+DPD
+Dec
+Nov
+Oct
+Sep
+Aug
+Jul
+Jun
+May
+Apr
+Mar
+Feb
+Jan
+2025
+ 
+ 
+ 
+ 
+ 
+S
+S
+S
+S
+S
+S
+S
+   Consumer Personal details on the Credit Account
+Date of
+Birth
+15-09-1998
+Gender
+Male
+Occupation -
+Email
+address
+HARSHVARDHANMANDALI901@GMAIL.COM
+Phone
+Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+-
+-
+Phone
+Type
+Phone
+Number
+Extension
+Mobile
+8555849483 -
+ID Type
+ID Number
+Date
+of
+issue
+Date
+of
+Expiry
+PAN
+ASZPH5641K -
+-
+Passport
+-
+-
+-
+Voter ID
+-
+-
+-
+Aadhaar/UID -
+-
+-
+Driving
+License
+-
+-
+-
+Ration Card
+-
+-
+-
+ 
+ 
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 12 of 14
+ 
+
+
+=== PAGE 13 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+   
+CREDIT ENQUIRIES
+Records Found: 3
+   This section shows the names of the credit institutions that have processed a credit / loan application for you.
+Harshavardhan Mandali
+Address 1
+ Cr Enq 1
+ 
+ 
+ 
+ 
+ 
+ 
+Date of Birth
+15-09-1998
+PAN
+ASZPH5641K
+ERN
+1709315534499
+Telephone
+-
+Passport Number
+-
+Search Type
+Credit Card
+Mobile Phone
+-
+Voter ID
+-
+Credit Institution Name
+Axis Bank
+Gender
+Male
+Driving License
+-
+Application date
+01-03-2024
+Marital Status
+-
+Ration Card
+-
+Amount applied for
+10,000
+Email
+-
+ 
+ 
+Duration of Agreement
+36
+Harshavardhan Mandali
+Address 1
+ Cr Enq 2
+ 
+ 
+ 
+ 
+ 
+ 
+Date of Birth
+15-09-1998
+PAN
+ASZPH5641K
+ERN
+1709017320421
+Telephone
+-
+Passport Number
+-
+Search Type
+Credit Card
+Mobile Phone
+8555849483
+Voter ID
+-
+Credit Institution Name
+Axis Bank
+Gender
+Male
+Driving License
+-
+Application date
+27-02-2024
+Marital Status
+-
+Ration Card
+-
+Amount applied for
+10,000
+Email
+-
+ 
+ 
+Duration of Agreement
+36
+Harshavardhan Mandali
+Address 1
+ Cr Enq 3
+ 
+ 
+ 
+ 
+ 
+ 
+Date of Birth
+15-09-1998
+PAN
+ASZPH5641K
+ERN
+1667106207740
+Telephone
+8555849483
+Passport Number
+-
+Search Type
+Consumer Search
+Mobile Phone
+-
+Voter ID
+-
+Credit Institution Name
+CapFloat Financial Services Pvt
+Ltd
+Gender
+Male
+Driving License
+-
+Application date
+30-10-2022
+Marital Status
+-
+Ration Card
+-
+Amount applied for
+60,000
+Email
+-
+ 
+ 
+Duration of Agreement
+12
+ 
+   
+CONTACTING US
+ 
+If you find a discrepancy in your report, it is important to quickly raise it with your lender.Under the Credit Information Companies (Regulation) Act 2005 and as per the guidelines set by the Reserve
+Bank of India, Experian Credit Information Company of India Private Limited is not authorized to change any data in your credit information report without authorisation from your lender. However, we
+would be happy to help you with this process. If you would like us to help please visit https://consumer.experian.in/ECV-OLN/ to raise a dispute regarding the discrepancy.
+   
+LEGEND
+ 
+Active: Credit Accounts that do not have â€œDate Closedâ€Â• populated.
+Closed : Credit accounts that have 'Date Closed' populated.
+CO: Entity ceased while account was open.
+CC: Entity ceased while account was closed.
+DPD : Days Past Due. Number of days that have passed from the agreed payment due date of EMI.
+DPD '0' : The number '0' in the circle indicates that the Payment is made as agreed and the credit account is up to date.
+DPD >0 : The number in the circle indicates the "Days Past Due" reported by the respective lender.
+When the below alphabets are shown in the DPD table, it means the lender is reporting Asset Classification and indicates the following:
+S : Standard: An account which is overdue for less than 90 days is considered as a Standard asset as per RBI guidelines.
+M : Special Mention: These accounts are "Standard" assets but for some discrepancy the lending organization would like to monitor this account closely.
+B : Substandard: An account which is overdue by 90 days for a period of less than or equal to 12 months is classified as Substandard asset as per RBI guidelines
+D : Doubtful: An account which is overdue by 90 days for more than 12 months is classified as doubtful asset as per RBI guidelines.
+L : Loss: An account where loss has been identified but the amount has not been written off, wholly or partially is classified as Loss asset as per RBI guidelines.
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 13 of 14
+ 
+
+
+=== PAGE 14 ===
+pd4ml evaluation copy. visit http://pd4ml.com
+<---------- END OF REPORT ---------->
+Experian Credit Information Company of India Private Limited ("ECICI") is registered as a Credit Information Company with the Reserve Bank of India. ECICI has empanelled several credit institutions /
+specified users ("Members") with it, from whom it collects information / data for the bureau operations. The current Experian Credit Information Report and Experian Credit Score ("Report") is a
+reflection of this information / data as submitted by the Member to ECICI. The Report may thus be limited to the information / data contributed by the Member. The information / data provided in the
+Report is as current and up to date as provided by the Members. The Report is not a guarantee of any particular outcome and you may therefore not use any information, in full or in part, as the sole basis
+for any decision you take. ECICI does not accept any responsibility for any loss that may arise to you from relying on the information / data in the Report. ECICI will use all reasonable skill and care in the
+supply of the information / data to you. However since we obtain the information / data from the Member, ECICI cannot guarantee or warranty that the information contained in the Report is complete,
+accurate, up-to-date or error-free. Any information contained herein does not reflect the views of ECICI or its directors or employees.
+This message contains legally privileged and/or confidential information. If you are not the intended recipient(s) of this message, you are hereby notified that any dissemination, distribution or copying of
+this Report is strictly prohibited. If you have received this Report in error, please notify the sender immediately and delete this Report from your computer and all your records.
+ 
+  
+ 
+Experian Credit Report
+Experian Report Number (ERN) : 1754457067441   
+Unique Transaction ID: 1903218511   
+ © Experian Ltd, 2025. All rights reserved.
+Page 14 of 14
+ 
+
+

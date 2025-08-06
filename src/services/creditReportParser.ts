@@ -1,6 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
 import type { UnprocessedAccount } from '@/services/gmailOAuth';
+import { CreditBureauParserFactory } from './creditBureauParsers/CreditBureauParserFactory';
+import type { CreditAccount } from './creditBureauParsers/BaseCreditBureauParser';
 
 // Configure PDF.js worker - use local worker file
 if (typeof window !== 'undefined') {
@@ -40,16 +42,18 @@ class CreditReportParser {
     password?: string
   ): Promise<CreditReportParseResult> {
     try {
-      // Read the PDF file
-      const arrayBuffer = await file.arrayBuffer();
+      // Read the PDF file once and create copies for different operations
+      const originalArrayBuffer = await file.arrayBuffer();
       
-      // Try to unlock PDF if password provided
+      // Try to unlock PDF if password provided (use a copy)
       if (password) {
-        await this.unlockPDF(arrayBuffer, password);
+        const unlockBuffer = originalArrayBuffer.slice();
+        await this.unlockPDF(unlockBuffer, password);
       }
       
-      // Extract text from PDF
-      const textContent = await this.extractTextFromPDF(arrayBuffer, password);
+      // Extract text from PDF (use another copy)
+      const textBuffer = originalArrayBuffer.slice();
+      const textContent = await this.extractTextFromPDF(textBuffer, password);
       
       // Parse the text content
       const parseResult = this.parseTextContent(textContent);
@@ -68,7 +72,7 @@ class CreditReportParser {
    */
   async isPDFPasswordProtected(file: File): Promise<boolean> {
     try {
-      const arrayBuffer = await file.arrayBuffer();
+      const originalArrayBuffer = await file.arrayBuffer();
       
       // Try to load the document with retries for worker issues
       let pdf;
@@ -76,7 +80,9 @@ class CreditReportParser {
       
       while (retries > 0) {
         try {
-          pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          // Use a fresh copy of the ArrayBuffer for each attempt
+          const bufferCopy = originalArrayBuffer.slice();
+          pdf = await pdfjsLib.getDocument({ data: bufferCopy }).promise;
           break;
         } catch (workerError: any) {
           if (workerError.message?.includes('Setting up fake worker failed') || 
@@ -125,8 +131,10 @@ class CreditReportParser {
    */
   private async unlockPDF(arrayBuffer: ArrayBuffer, password: string): Promise<void> {
     try {
+      // Use a fresh copy to avoid ArrayBuffer detachment issues
+      const bufferCopy = arrayBuffer.slice();
       const pdf = await pdfjsLib.getDocument({ 
-        data: arrayBuffer,
+        data: bufferCopy,
         password: password
       }).promise;
       
@@ -147,8 +155,10 @@ class CreditReportParser {
     // Try to load the document with retries for worker issues
     while (retries > 0) {
       try {
+        // Use a fresh copy for each retry to avoid ArrayBuffer detachment
+        const bufferCopy = arrayBuffer.slice();
         const loadingTask = pdfjsLib.getDocument({ 
-          data: arrayBuffer,
+          data: bufferCopy,
           password: password 
         });
         
@@ -203,55 +213,82 @@ class CreditReportParser {
   }
 
   /**
-   * Parse text content and extract account information
+   * Parse text content and extract account information using specialized bureau parsers
    */
   private parseTextContent(text: string): CreditReportParseResult {
-    const accounts: CreditReportAccount[] = [];
     const errors: string[] = [];
     
     try {
-      // Detect credit report type
-      const reportType = this.detectReportType(text);
-      const reportDate = this.extractReportDate(text);
+      console.log('📋 Starting credit report text parsing...');
+      console.log(`📊 Text length: ${text.length} characters`);
+      console.log(`🔍 First 300 chars of text: "${text.substring(0, 300)}"`);
       
-      // Extract accounts based on report type
-      if (reportType === 'CIBIL') {
-        accounts.push(...this.parseCIBILReport(text));
-      } else if (reportType === 'Experian') {
-        accounts.push(...this.parseExperianReport(text));
-      } else if (reportType === 'Equifax') {
-        accounts.push(...this.parseEquifaxReport(text));
-      } else if (reportType === 'CRIF') {
-        accounts.push(...this.parseCRIFReport(text));
-      } else {
-        // Generic parsing for unknown formats
-        accounts.push(...this.parseGenericReport(text));
+      // Use the new bureau-specific parser factory
+      console.log('🏭 Calling CreditBureauParserFactory...');
+      const parseResult = CreditBureauParserFactory.parseReport(text);
+      
+      if (!parseResult) {
+        console.log('⚠️ No specialized parser found, falling back to generic parsing');
+        // Fallback to generic parsing if no specialized parser found
+        return this.parseGenericReport(text);
       }
       
+      console.log('✅ Bureau-specific parsing successful:', parseResult.bureau);
+      
+      // Convert CreditAccount[] to CreditReportAccount[] for backward compatibility
+      const convertedAccounts = parseResult.accounts.map(this.convertCreditAccount);
+      
       // Filter for active accounts only
-      const activeAccounts = accounts.filter(account => 
+      const activeAccounts = convertedAccounts.filter(account => 
         account.accountStatus === 'active'
       );
       
       return {
-        reportDate,
-        reportType,
+        reportDate: parseResult.summary.reportDate,
+        reportType: parseResult.bureau,
         accounts: activeAccounts,
-        totalAccounts: accounts.length,
-        activeAccounts: activeAccounts.length,
-        errors
+        totalAccounts: parseResult.summary.totalAccounts,
+        activeAccounts: parseResult.summary.activeAccounts,
+        errors: parseResult.summary.errors
       };
       
     } catch (error) {
+      console.error('Error in bureau-specific parsing:', error);
       errors.push(`Parsing error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return {
-        accounts: [],
-        totalAccounts: 0,
-        activeAccounts: 0,
-        errors
-      };
+      
+      // Fallback to generic parsing
+      try {
+        return this.parseGenericReport(text);
+      } catch (fallbackError) {
+        errors.push(`Fallback parsing error: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`);
+        return {
+          accounts: [],
+          totalAccounts: 0,
+          activeAccounts: 0,
+          errors
+        };
+      }
     }
   }
+
+  /**
+   * Convert new CreditAccount format to legacy CreditReportAccount format
+   */
+  private convertCreditAccount = (account: CreditAccount): CreditReportAccount => {
+    return {
+      accountType: account.accountType,
+      bankName: account.bankName,
+      accountNumber: account.accountNumber,
+      accountStatus: account.accountStatus,
+      balance: account.currentBalance || account.outstandingAmount,
+      creditLimit: account.creditLimit,
+      tenure: account.tenure ? `${account.tenure} months` : undefined,
+      openDate: account.accountOpenDate,
+      lastPaymentDate: account.lastPaymentDate,
+      rawText: account.rawData,
+      confidenceScore: account.confidenceScore
+    };
+  };
 
   /**
    * Detect credit report type from text content
@@ -631,19 +668,25 @@ class CreditReportParser {
   convertToUnprocessedAccounts(
     userId: string, 
     accounts: CreditReportAccount[]
-  ): Omit<UnprocessedAccount, 'id' | 'created_at'>[] {
+  ): Array<{
+    bank_name: string;
+    account_type: string;
+    account_number_partial: string;
+    balance?: number;
+    credit_limit?: number;
+    open_date?: string;
+    confidence_score: number;
+    raw_data?: string;
+  }> {
     return accounts.map(account => ({
-      user_id: userId,
-      source_email_integration_id: 'credit_report_upload', // Special identifier for credit reports
-      discovered_account_name: `${account.bankName} - ${account.accountType}`,
       bank_name: account.bankName,
       account_type: account.accountType,
-      balance: account.balance,
       account_number_partial: account.accountNumber.slice(-4),
+      balance: account.balance,
+      credit_limit: account.creditLimit,
+      open_date: account.openDate,
       confidence_score: account.confidenceScore,
-      needs_review: account.confidenceScore < 0.8, // High confidence accounts don't need review
-      status: 'pending' as const,
-      discovery_date: new Date().toISOString(),
+      raw_data: account.rawText?.substring(0, 500) // Limit raw data size
     }));
   }
 }

@@ -100,6 +100,8 @@ const CreditReportUpload: React.FC<CreditReportUploadProps> = ({
         if (error.message.includes('Setting up fake worker failed') || 
             error.message.includes('Failed to fetch dynamically imported module')) {
           errorMessage = "PDF processing is temporarily unavailable. Please try again in a moment.";
+        } else if (error.message.includes('Cannot perform Construct on a detached ArrayBuffer')) {
+          errorMessage = "PDF file processing error. Please try selecting the file again.";
         } else if (error.message.includes('Failed to check PDF')) {
           errorMessage = error.message;
         }
@@ -180,6 +182,8 @@ const CreditReportUpload: React.FC<CreditReportUploadProps> = ({
         if (error.message.includes('Setting up fake worker failed') || 
             error.message.includes('Failed to fetch dynamically imported module')) {
           errorMessage = "PDF processing is temporarily unavailable. Please check your internet connection and try again.";
+        } else if (error.message.includes('Cannot perform Construct on a detached ArrayBuffer')) {
+          errorMessage = "PDF file processing error. Please try uploading the file again.";
         } else if (error.message.includes('Incorrect password')) {
           errorMessage = "Incorrect password provided for the PDF file.";
         } else if (error.message.includes('Failed to parse credit report')) {
