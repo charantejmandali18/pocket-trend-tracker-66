@@ -878,11 +878,12 @@ export const findGroupByCode = async (groupCode: string): Promise<StoredGroup | 
       .from('expense_groups')
       .select('*')
       .eq('group_code', groupCode)
-      .eq('is_active', true)
-      .single();
+      .eq('is_active', true);
 
     if (error) throw error;
-    return data;
+    
+    // Return the first matching group, or null if none found
+    return data && data.length > 0 ? data[0] : null;
   } catch (error) {
     console.error('Error finding group by code:', error);
     return null;

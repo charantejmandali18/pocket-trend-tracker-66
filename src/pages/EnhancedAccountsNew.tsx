@@ -48,6 +48,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { formatIndianCurrency, formatNetWorth, formatAccountBalance } from '@/utils/currencyFormatter';
 
 const EnhancedAccountsNew = () => {
   const { user, isPersonalMode, currentGroup, userGroups, dataVersion, refreshData } = useApp();
@@ -418,7 +419,7 @@ const EnhancedAccountsNew = () => {
       
       toast({
         title: "EMI Payment Successful",
-        description: `₹${result.paymentAmount.toLocaleString()} paid towards ${result.loanAccount.name}. Transaction automatically created.`,
+        description: `${formatIndianCurrency(result.paymentAmount)} paid towards ${result.loanAccount.name}. Transaction automatically created.`,
       });
       
       // Refresh accounts and data
@@ -483,7 +484,7 @@ const EnhancedAccountsNew = () => {
       
       toast({
         title: "Recurring Payment Successful",
-        description: `₹${result.paymentAmount.toLocaleString()} paid for ${result.recurringAccount.name}. Transaction automatically created.`,
+        description: `${formatIndianCurrency(result.paymentAmount)} paid for ${result.recurringAccount.name}. Transaction automatically created.`,
       });
       
       // Refresh accounts and data
@@ -1174,26 +1175,26 @@ const EnhancedAccountsNew = () => {
                     <div className="bg-blue-50 p-3 rounded-lg">
                       <Label className="text-sm font-medium text-blue-800">Calculated EMI Details</Label>
                       <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
-                        <div>Monthly EMI: <span className="font-semibold">₹{newAccount.monthly_emi.toLocaleString()}</span></div>
-                        <div>Outstanding: <span className="font-semibold">₹{newAccount.balance.toLocaleString()}</span></div>
+                        <div>Monthly EMI: <span className="font-semibold">{formatIndianCurrency(newAccount.monthly_emi)}</span></div>
+                        <div>Outstanding: <span className="font-semibold">{formatAccountBalance(newAccount.balance, newAccount.type)}</span></div>
                         {newAccount.is_home_loan && newAccount.moratorium_period_months > 0 && (
                           <>
                             <div>Moratorium EMI: <span className="font-semibold">
                               ₹{(() => {
                                 // Use actual bank EMI if provided, otherwise calculate
                                 if (newAccount.actual_moratorium_emi) {
-                                  return newAccount.actual_moratorium_emi.toLocaleString();
+                                  return formatIndianCurrency(newAccount.actual_moratorium_emi);
                                 }
                                 if (newAccount.disbursed_amount > 0 && newAccount.interest_rate > 0) {
                                   const monthlyRate = newAccount.interest_rate / (12 * 100);
                                   const moratoriumEmi = newAccount.disbursed_amount * monthlyRate;
-                                  return Math.ceil(moratoriumEmi).toLocaleString(); // Banks round UP to next rupee
+                                  return formatIndianCurrency(Math.ceil(moratoriumEmi)); // Banks round UP to next rupee
                                 }
                                 return '0';
                               })()}
                             </span></div>
-                            <div>Sanctioned: <span className="font-semibold">₹{newAccount.sanctioned_amount.toLocaleString()}</span></div>
-                            <div>Disbursed: <span className="font-semibold">₹{newAccount.disbursed_amount.toLocaleString()}</span></div>
+                            <div>Sanctioned: <span className="font-semibold">{formatIndianCurrency(newAccount.sanctioned_amount)}</span></div>
+                            <div>Disbursed: <span className="font-semibold">{formatIndianCurrency(newAccount.disbursed_amount)}</span></div>
                             {newAccount.moratorium_period_months > 0 && (
                               <div>Moratorium: <span className="font-semibold">{newAccount.moratorium_period_months} months</span></div>
                             )}
@@ -1590,26 +1591,26 @@ const EnhancedAccountsNew = () => {
                   <div className="bg-blue-50 p-3 rounded-lg">
                     <Label className="text-sm font-medium text-blue-800">Calculated EMI Details</Label>
                     <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
-                      <div>Monthly EMI: <span className="font-semibold">₹{editAccount.monthly_emi.toLocaleString()}</span></div>
-                      <div>Outstanding: <span className="font-semibold">₹{editAccount.balance.toLocaleString()}</span></div>
+                      <div>Monthly EMI: <span className="font-semibold">{formatIndianCurrency(editAccount.monthly_emi)}</span></div>
+                      <div>Outstanding: <span className="font-semibold">{formatAccountBalance(editAccount.balance, editAccount.type)}</span></div>
                       {editAccount.is_home_loan && editAccount.moratorium_period_months > 0 && (
                         <>
                           <div>Moratorium EMI: <span className="font-semibold">
                             ₹{(() => {
                               // Use actual bank EMI if provided, otherwise calculate
                               if (editAccount.actual_moratorium_emi) {
-                                return editAccount.actual_moratorium_emi.toLocaleString();
+                                return formatIndianCurrency(editAccount.actual_moratorium_emi);
                               }
                               if (editAccount.disbursed_amount > 0 && editAccount.interest_rate > 0) {
                                 const monthlyRate = editAccount.interest_rate / (12 * 100);
                                 const moratoriumEmi = editAccount.disbursed_amount * monthlyRate;
-                                return Math.ceil(moratoriumEmi).toLocaleString(); // Banks round UP to next rupee
+                                return formatIndianCurrency(Math.ceil(moratoriumEmi)); // Banks round UP to next rupee
                               }
                               return '0';
                             })()}
                           </span></div>
-                          <div>Sanctioned: <span className="font-semibold">₹{editAccount.sanctioned_amount.toLocaleString()}</span></div>
-                          <div>Disbursed: <span className="font-semibold">₹{editAccount.disbursed_amount.toLocaleString()}</span></div>
+                          <div>Sanctioned: <span className="font-semibold">{formatIndianCurrency(editAccount.sanctioned_amount)}</span></div>
+                          <div>Disbursed: <span className="font-semibold">{formatIndianCurrency(editAccount.disbursed_amount)}</span></div>
                           {editAccount.moratorium_period_months > 0 && (
                             <div>Moratorium: <span className="font-semibold">{editAccount.moratorium_period_months} months</span></div>
                           )}
@@ -1696,8 +1697,8 @@ const EnhancedAccountsNew = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${financialSummary.netWorth >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-              {financialSummary.netWorth >= 0 ? '+' : ''}₹{financialSummary.netWorth.toLocaleString()}
+            <div className={`text-2xl font-bold ${formatNetWorth(financialSummary.netWorth).className}`}>
+              {formatNetWorth(financialSummary.netWorth).formatted}
             </div>
             <div className="text-xs text-gray-500">
               Assets - Liabilities
@@ -1714,7 +1715,7 @@ const EnhancedAccountsNew = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              ₹{financialSummary.totalAssets.toLocaleString()}
+              {formatIndianCurrency(financialSummary.totalAssets)}
             </div>
             <div className="text-xs text-gray-500">
               Savings + Investments
@@ -1731,7 +1732,7 @@ const EnhancedAccountsNew = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              ₹{financialSummary.totalLiabilities.toLocaleString()}
+              {formatIndianCurrency(financialSummary.totalLiabilities)}
             </div>
             <div className="text-xs text-gray-500">
               Loans + Credit Cards
@@ -1748,7 +1749,7 @@ const EnhancedAccountsNew = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">
-              ₹{financialSummary.liquidCash.toLocaleString()}
+              {formatIndianCurrency(financialSummary.liquidCash)}
             </div>
             <div className="text-xs text-gray-500">
               Available cash
@@ -1789,14 +1790,14 @@ const EnhancedAccountsNew = () => {
                           <span className="text-sm">{account.name}</span>
                         </div>
                         <span className="text-sm font-medium text-green-600">
-                          ₹{account.balance.toLocaleString()}
+                          {formatAccountBalance(account.balance, account.type)}
                         </span>
                       </div>
                     ))}
                     <div className="border-t pt-2 mt-2">
                       <div className="flex items-center justify-between font-medium">
                         <span>Total Assets</span>
-                        <span className="text-green-600">₹{financialSummary.totalAssets.toLocaleString()}</span>
+                        <span className="text-green-600">{formatIndianCurrency(financialSummary.totalAssets)}</span>
                       </div>
                     </div>
                   </div>
@@ -1821,14 +1822,14 @@ const EnhancedAccountsNew = () => {
                             <span className="text-sm">{account.name}</span>
                           </div>
                           <span className="text-sm font-medium text-red-600">
-                            ₹{account.balance.toLocaleString()}
+                            {formatAccountBalance(account.balance, account.type)}
                           </span>
                         </div>
                       ))}
                       <div className="border-t pt-2 mt-2">
                         <div className="flex items-center justify-between font-medium">
                           <span>Total Liabilities</span>
-                          <span className="text-red-600">₹{financialSummary.totalLiabilities.toLocaleString()}</span>
+                          <span className="text-red-600">{formatIndianCurrency(financialSummary.totalLiabilities)}</span>
                         </div>
                       </div>
                     </div>
@@ -1889,7 +1890,7 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
                           <div className="text-lg font-semibold text-green-600">
-                            ₹{account.balance.toLocaleString()}
+                            {formatAccountBalance(account.balance, account.type)}
                           </div>
                           {account.is_pool_contribution && (
                             <Badge variant="secondary" className="text-xs">
@@ -1967,7 +1968,7 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
                           <div className="text-lg font-semibold text-green-600">
-                            ₹{account.balance.toLocaleString()}
+                            {formatAccountBalance(account.balance, account.type)}
                           </div>
                           {account.is_pool_contribution && (
                             <Badge variant="secondary" className="text-xs">
@@ -2008,7 +2009,7 @@ const EnhancedAccountsNew = () => {
                   <div className="border-t pt-3 mt-3">
                     <div className="flex items-center justify-between font-medium">
                       <span>Total Liquid Cash</span>
-                      <span className="text-green-600">₹{financialSummary.liquidCash.toLocaleString()}</span>
+                      <span className="text-green-600">{formatIndianCurrency(financialSummary.liquidCash)}</span>
                     </div>
                   </div>
                 </div>
@@ -2044,14 +2045,14 @@ const EnhancedAccountsNew = () => {
                         <div>
                           <h3 className="font-medium">{account.name}</h3>
                           <p className="text-sm text-gray-500">
-                            {account.bank_name} • Limit: ₹{account.credit_limit?.toLocaleString() || 'N/A'}
+                            {account.bank_name} • Limit: {formatIndianCurrency(account.credit_limit || 0)}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
                           <div className="text-lg font-semibold text-red-600">
-                            ₹{account.balance.toLocaleString()}
+                            {formatAccountBalance(account.balance, account.type)}
                           </div>
                           {account.credit_limit && (
                             <div className="text-xs text-gray-500">
@@ -2132,7 +2133,7 @@ const EnhancedAccountsNew = () => {
                           <div className="flex items-center space-x-3">
                             <div className="text-right">
                               <div className="text-lg font-semibold text-red-600">
-                                ₹{account.balance.toLocaleString()}
+                                {formatAccountBalance(account.balance, account.type)}
                               </div>
                               <div className="text-xs text-gray-500">Outstanding</div>
                             </div>
@@ -2170,7 +2171,7 @@ const EnhancedAccountsNew = () => {
                         <div className="grid grid-cols-3 gap-4 mt-3 pt-3 border-t text-sm">
                           <div>
                             <span className="text-gray-500">Monthly EMI</span>
-                            <p className="font-medium">₹{(account.monthly_emi || 0).toLocaleString()}</p>
+                            <p className="font-medium">{formatIndianCurrency(account.monthly_emi)}</p>
                           </div>
                           <div>
                             <span className="text-gray-500">Next Due</span>
@@ -2191,7 +2192,7 @@ const EnhancedAccountsNew = () => {
                               onClick={() => handleEMIPayment(account.id)}
                               className="text-green-600 hover:bg-green-50"
                             >
-                              Pay EMI ₹{account.monthly_emi.toLocaleString()}
+                              Pay EMI {formatIndianCurrency(account.monthly_emi)}
                             </Button>
                           </div>
                         )}
@@ -2236,7 +2237,7 @@ const EnhancedAccountsNew = () => {
                         <div className="flex items-center space-x-2">
                           <div className="text-right">
                             <div className="font-medium text-orange-600">
-                              ₹{account.balance.toLocaleString()}
+                              {formatAccountBalance(account.balance, account.type)}
                             </div>
                             <div className="text-xs text-gray-500">per month</div>
                             <Button 
@@ -2282,7 +2283,7 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center justify-between font-medium">
                         <span>Total Monthly Recurring</span>
                         <span className="text-orange-600">
-                          ₹{accounts.filter(a => a.type === 'recurring').reduce((sum, a) => sum + a.balance, 0).toLocaleString()}
+                          {formatIndianCurrency(accounts.filter(a => a.type === 'recurring').reduce((sum, a) => sum + a.balance, 0))}
                         </span>
                       </div>
                     </div>
@@ -2327,7 +2328,7 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
                           <div className="text-lg font-semibold text-green-600">
-                            ₹{account.balance.toLocaleString()}
+                            {formatAccountBalance(account.balance, account.type)}
                           </div>
                           <div className="text-xs text-gray-500">Current Value</div>
                           <Button 
@@ -2414,7 +2415,7 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
                           <div className="text-lg font-semibold text-blue-600">
-                            ₹{account.balance.toLocaleString()}
+                            {formatAccountBalance(account.balance, account.type)}
                           </div>
                           <div className="text-xs text-gray-500">Coverage/Premium</div>
                         </div>
