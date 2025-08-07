@@ -742,18 +742,24 @@ export const getStoredGroups = async (): Promise<StoredGroup[]> => {
 
 export const getUserGroups = async (userId: string): Promise<StoredGroup[]> => {
   try {
+    console.log('🔍 getUserGroups - Fetching groups for user:', userId);
+    
     const { data, error } = await supabase
       .from('group_members')
       .select(`
         expense_groups (*)
       `)
       .eq('user_id', userId)
-      .eq('status', 'accepted');
+      .in('status', ['active', 'accepted']);
+
+    console.log('📊 getUserGroups - Raw data:', { data, error });
 
     if (error) throw error;
     
     // Type-safe extraction of group data
     const groups = data?.map((item: any) => item.expense_groups).filter(Boolean) || [];
+    console.log('📊 getUserGroups - Extracted groups:', groups);
+    
     return groups as StoredGroup[];
   } catch (error) {
     console.error('Error fetching user groups:', error);
@@ -832,25 +838,51 @@ export const addStoredGroup = async (group: { name: string; description?: string
 
 export const joinStoredGroup = async (groupCode: string, userId: string, userEmail: string): Promise<boolean> => {
   try {
-    // Find group by code
-    const { data: group, error: groupError } = await supabase
+    console.log('🔍 Looking for group with code:', groupCode);
+    
+    // First, let's see all groups in the table to debug
+    const { data: allGroupsDebug, error: debugError } = await supabase
       .from('expense_groups')
-      .select('*')
-      .eq('group_code', groupCode)
-      .eq('is_active', true)
-      .single();
-
-    if (groupError || !group) return false;
+      .select('group_code, name, is_active')
+      .limit(10);
+    console.log('🔍 DEBUG - All groups in expense_groups table:', { allGroupsDebug, debugError });
+    
+    // Check current user
+    const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+    console.log('🔍 Current user:', { currentUser: currentUser?.id, userError });
+    
+    // Try a direct query without RLS
+    const { data: directQuery, error: directError } = await supabase.rpc('get_all_groups');
+    console.log('🔍 Direct RPC query (if exists):', { directQuery, directError });
+    
+    // Try different approaches to find the group
+    console.log('🔍 Trying different query approaches...');
+    
+    // Try to find the group using our improved function
+    const group = await findGroupByCode(groupCode);
+    console.log('📊 Group found via findGroupByCode:', group);
+    
+    if (!group) {
+      console.error('No group found with code:', groupCode);
+      return false;
+    }
 
     // Check if already a member
-    const { data: existing } = await supabase
+    const { data: existingMembers, error: memberCheckError } = await supabase
       .from('group_members')
       .select('*')
       .eq('group_id', group.id)
-      .eq('user_id', userId)
-      .single();
+      .eq('user_id', userId);
 
-    if (existing) return false;
+    if (memberCheckError) {
+      console.error('Error checking existing membership:', memberCheckError);
+      return false;
+    }
+
+    if (existingMembers && existingMembers.length > 0) {
+      console.log('User is already a member of this group');
+      return false;
+    }
 
     // Add membership
     const { error: memberError } = await supabase
@@ -872,13 +904,45 @@ export const joinStoredGroup = async (groupCode: string, userId: string, userEma
   }
 };
 
+// Function to find group by code using RPC (bypasses RLS)
+export const findGroupByCodeRPC = async (groupCode: string): Promise<StoredGroup | null> => {
+  try {
+    console.log('🔍 findGroupByCodeRPC - Looking for group with code via RPC:', groupCode);
+    
+    const { data, error } = await supabase.rpc('find_group_by_code', {
+      search_code: groupCode
+    });
+
+    console.log('📊 findGroupByCodeRPC - RPC result:', { data, error });
+
+    if (error) {
+      console.log('RPC not available, falling back to direct query');
+      return null;
+    }
+    
+    return data && data.length > 0 ? data[0] : null;
+  } catch (error) {
+    console.error('Error in RPC call:', error);
+    return null;
+  }
+};
+
 export const findGroupByCode = async (groupCode: string): Promise<StoredGroup | null> => {
   try {
+    console.log('🔍 findGroupByCode - Looking for group with code:', groupCode);
+    
+    // First try the RPC approach
+    let result = await findGroupByCodeRPC(groupCode);
+    if (result) return result;
+    
+    // Fallback to direct query (may be blocked by RLS)
     const { data, error } = await supabase
       .from('expense_groups')
       .select('*')
       .eq('group_code', groupCode)
       .eq('is_active', true);
+
+    console.log('📊 findGroupByCode - Direct query result:', { data, error });
 
     if (error) throw error;
     
@@ -887,6 +951,55 @@ export const findGroupByCode = async (groupCode: string): Promise<StoredGroup | 
   } catch (error) {
     console.error('Error finding group by code:', error);
     return null;
+  }
+};
+
+export const deleteStoredGroup = async (groupId: string, userId: string): Promise<boolean> => {
+  try {
+    // First, verify the user is the owner of the group
+    const { data: groupData, error: groupError } = await supabase
+      .from('expense_groups')
+      .select('owner_id')
+      .eq('id', groupId)
+      .single();
+
+    if (groupError) {
+      console.error('Error fetching group:', groupError);
+      return false;
+    }
+
+    if (groupData.owner_id !== userId) {
+      console.error('User is not the owner of the group');
+      return false;
+    }
+
+    // Delete all group members first (cascade should handle this, but let's be explicit)
+    const { error: membersError } = await supabase
+      .from('group_members')
+      .delete()
+      .eq('group_id', groupId);
+
+    if (membersError) {
+      console.error('Error deleting group members:', membersError);
+      return false;
+    }
+
+    // Delete the group
+    const { error: deleteError } = await supabase
+      .from('expense_groups')
+      .delete()
+      .eq('id', groupId);
+
+    if (deleteError) {
+      console.error('Error deleting group:', deleteError);
+      return false;
+    }
+
+    console.log('Group deleted successfully');
+    return true;
+  } catch (error) {
+    console.error('Error deleting group:', error);
+    return false;
   }
 };
 

@@ -55,7 +55,7 @@ import { creditReportParser, type CreditReportAccount } from '@/services/creditR
 import { supabase } from '@/integrations/supabase/client';
 
 const Profile = () => {
-  const { user, userGroups, isPersonalMode, currentGroup } = useApp();
+  const { user, userGroups, isPersonalMode, currentGroup, deleteGroup } = useApp();
   const { toast } = useToast();
   
   // Safe date formatting helper
@@ -254,6 +254,12 @@ const Profile = () => {
       title: "Copied!",
       description: `${label} copied to clipboard`,
     });
+  };
+
+  const handleDeleteGroup = async (group: any) => {
+    if (window.confirm(`Are you sure you want to delete the group "${group.name}"? This action cannot be undone and will affect all group members.`)) {
+      await deleteGroup(group.id);
+    }
   };
 
   const exportData = async () => {
@@ -819,13 +825,25 @@ const Profile = () => {
                           </Badge>
                           <div className="text-right">
                             <div className="text-sm font-medium">Code: {group.group_code}</div>
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              onClick={() => copyToClipboard(group.group_code, 'Group Code')}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => copyToClipboard(group.group_code, 'Group Code')}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              {isOwner && (
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => handleDeleteGroup(group)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>

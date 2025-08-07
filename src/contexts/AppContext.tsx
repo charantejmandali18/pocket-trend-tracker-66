@@ -10,6 +10,7 @@ import {
   addStoredGroup as addSupabaseGroup, 
   joinStoredGroup as joinSupabaseGroup,
   findGroupByCode as findSupabaseGroupByCode, 
+  deleteStoredGroup as deleteSupabaseGroup,
   getStoredCategories as getSupabaseCategories,
   addStoredCategory as addSupabaseCategory,
   type StoredGroup as SupabaseStoredGroup 
@@ -56,6 +57,7 @@ interface AppContextType {
   switchToGroup: (groupId: string) => void;
   createGroup: (name: string, description?: string) => Promise<StoredGroup | null>;
   joinGroup: (groupCode: string) => Promise<boolean>;
+  deleteGroup: (groupId: string) => Promise<boolean>;
   addCategory: (name: string, color: string, icon?: string) => Promise<any>;
   refreshCategories: () => Promise<void>;
   refreshGroups: () => Promise<void>;
@@ -287,17 +289,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return false;
       }
 
+      // Always refresh groups after successful join
+      await refreshGroups();
+      
       const group = STORAGE_CONFIG.USE_LOCAL_STORAGE
         ? findLocalGroupByCode(groupCode)
         : await findSupabaseGroupByCode(groupCode);
       if (group) {
         setCurrentGroup(group);
         setIsPersonalMode(false);
-        await refreshGroups();
         
         toast({
           title: "Success",
           description: `Joined group "${group.name}" successfully!`,
+        });
+      } else {
+        // Even if we can't find the group details (due to RLS), show success
+        toast({
+          title: "Success",
+          description: "Successfully joined the group!",
         });
       }
 
@@ -307,6 +317,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toast({
         title: "Error",
         description: "Failed to join group",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const deleteGroup = async (groupId: string): Promise<boolean> => {
+    if (!user) {
+      console.error('No user found for group deletion');
+      toast({
+        title: "Error",
+        description: "You must be logged in to delete a group",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    try {
+      const success = STORAGE_CONFIG.USE_LOCAL_STORAGE
+        ? false // TODO: Implement local storage delete if needed
+        : await deleteSupabaseGroup(groupId, user.id);
+
+      if (success) {
+        // If the deleted group is currently selected, switch to personal mode
+        if (currentGroup?.id === groupId) {
+          setCurrentGroup(null);
+          setIsPersonalMode(true);
+        }
+        
+        await refreshGroups();
+        toast({
+          title: "Success",
+          description: "Group deleted successfully",
+        });
+        return true;
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to delete group. You must be the owner to delete a group.",
+          variant: "destructive",
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete group",
         variant: "destructive",
       });
       return false;
@@ -377,6 +435,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     switchToGroup,
     createGroup,
     joinGroup,
+    deleteGroup,
     addCategory,
     refreshCategories,
     refreshGroups,
