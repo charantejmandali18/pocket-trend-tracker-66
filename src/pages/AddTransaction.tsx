@@ -245,7 +245,7 @@ const AddTransaction = () => {
       if (isPersonalMode) {
         transactions = await getPersonalTransactions(user.id, user.email);
       } else if (currentGroup) {
-        transactions = await getGroupTransactions(currentGroup.id);
+        transactions = await getGroupTransactions(currentGroup.id, user.id, user.email);
       }
       
       // Sort by created_at descending and take latest 10

@@ -156,10 +156,24 @@ class StorageService {
       : await SupabaseStorage.getPersonalTransactions(userId, userEmail);
   }
 
-  async getGroupTransactions(groupId: string) {
+  async getGroupTransactions(groupId: string, currentUserId: string, currentUserEmail?: string) {
     return this.useLocalStorage
-      ? LocalStorage.getGroupTransactions(groupId)
-      : await SupabaseStorage.getGroupTransactions(groupId);
+      ? LocalStorage.getGroupTransactions(groupId, currentUserId, currentUserEmail)
+      : await SupabaseStorage.getGroupTransactions(groupId, currentUserId, currentUserEmail);
+  }
+
+  // Assign transaction to group
+  async assignTransactionToGroup(transactionId: string, groupId: string | null) {
+    return this.useLocalStorage
+      ? LocalStorage.assignTransactionToGroup(transactionId, groupId)
+      : await SupabaseStorage.assignTransactionToGroup(transactionId, groupId);
+  }
+
+  // Get transactions for balance calculation
+  async getTransactionsForBalanceCalculation(accountName: string, currentUserId: string, groupId?: string | null, currentUserEmail?: string) {
+    return this.useLocalStorage
+      ? LocalStorage.getTransactionsForBalanceCalculation(accountName, currentUserId, groupId, currentUserEmail)
+      : await SupabaseStorage.getTransactionsForBalanceCalculation(accountName, currentUserId, groupId, currentUserEmail);
   }
 
   // Clear data method
@@ -194,11 +208,18 @@ class StorageService {
     return await SupabaseStorage.deleteFinancialAccount(accountId);
   }
 
-  async getFinancialAccounts() {
+  async getFinancialAccounts(userId?: string) {
     if (this.useLocalStorage) {
-      return LocalStorage.getFinancialAccounts();
+      return LocalStorage.getFinancialAccounts(userId);
     }
     return await SupabaseStorage.getFinancialAccounts();
+  }
+
+  async assignAccountToGroup(accountId: string, groupId: string | null, contributionType?: 'none' | 'amount' | 'percentage', contributionAmount?: number, contributionPercentage?: number) {
+    if (this.useLocalStorage) {
+      return LocalStorage.assignAccountToGroup(accountId, groupId, contributionType, contributionAmount, contributionPercentage);
+    }
+    return await SupabaseStorage.assignAccountToGroup(accountId, groupId, contributionType, contributionAmount, contributionPercentage);
   }
 
   getCreditCards() {
@@ -270,10 +291,13 @@ export const addInsurance = storageService.addInsurance.bind(storageService);
 export const addProperty = storageService.addProperty.bind(storageService);
 export const getPersonalTransactions = storageService.getPersonalTransactions.bind(storageService);
 export const getGroupTransactions = storageService.getGroupTransactions.bind(storageService);
+export const assignTransactionToGroup = storageService.assignTransactionToGroup.bind(storageService);
+export const getTransactionsForBalanceCalculation = storageService.getTransactionsForBalanceCalculation.bind(storageService);
 export const addFinancialAccount = storageService.addFinancialAccount.bind(storageService);
 export const updateFinancialAccount = storageService.updateFinancialAccount.bind(storageService);
 export const deleteFinancialAccount = storageService.deleteFinancialAccount.bind(storageService);
 export const getFinancialAccounts = storageService.getFinancialAccounts.bind(storageService);
+export const assignAccountToGroup = storageService.assignAccountToGroup.bind(storageService);
 export const addRecurringPayment = storageService.addRecurringPayment.bind(storageService);
 export const clearAllStoredData = storageService.clearAllStoredData.bind(storageService);
 export const getCreditCards = storageService.getCreditCards.bind(storageService);

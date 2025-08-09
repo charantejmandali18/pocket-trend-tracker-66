@@ -1176,7 +1176,7 @@ export const calculateNetWorth = async (userId: string, groupId?: string): Promi
   }
 };
 
-// Get transactions for personal mode
+// Get transactions for personal mode - shows ALL user's transactions (personal + all group transactions they have access to)
 export const getPersonalTransactions = async (currentUserId: string, currentUserEmail?: string): Promise<StoredTransaction[]> => {
   try {
     const { data, error } = await supabase
@@ -1190,7 +1190,7 @@ export const getPersonalTransactions = async (currentUserId: string, currentUser
           icon
         )
       `)
-      .or(`user_id.eq.${currentUserId},and(group_id.is.null,created_by.eq.${currentUserId})`)
+      .or(`user_id.eq.${currentUserId},created_by.eq.${currentUserId}${currentUserEmail ? `,member_email.eq.${currentUserEmail}` : ''}`)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -1208,8 +1208,8 @@ export const getPersonalTransactions = async (currentUserId: string, currentUser
   }
 };
 
-// Get transactions for group mode
-export const getGroupTransactions = async (groupId: string): Promise<StoredTransaction[]> => {
+// Get transactions for group mode - shows ONLY transactions assigned to specific group
+export const getGroupTransactions = async (groupId: string, currentUserId: string, currentUserEmail?: string): Promise<StoredTransaction[]> => {
   try {
     const { data, error } = await supabase
       .from('transactions')
@@ -1223,6 +1223,7 @@ export const getGroupTransactions = async (groupId: string): Promise<StoredTrans
         )
       `)
       .eq('group_id', groupId)
+      .or(`user_id.eq.${currentUserId},created_by.eq.${currentUserId}${currentUserEmail ? `,member_email.eq.${currentUserEmail}` : ''}`)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -1236,6 +1237,59 @@ export const getGroupTransactions = async (groupId: string): Promise<StoredTrans
     return mappedData;
   } catch (error) {
     console.error('Error fetching group transactions:', error);
+    return [];
+  }
+};
+
+// Assign transaction to a group (or unassign by passing null)
+export const assignTransactionToGroup = async (transactionId: string, groupId: string | null): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('transactions')
+      .update({ group_id: groupId })
+      .eq('id', transactionId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error assigning transaction to group:', error);
+    return false;
+  }
+};
+
+// Get transactions for account balance calculation (respects group context)
+export const getTransactionsForBalanceCalculation = async (
+  accountName: string, 
+  currentUserId: string, 
+  groupId?: string | null,
+  currentUserEmail?: string
+): Promise<StoredTransaction[]> => {
+  try {
+    let query = supabase
+      .from('transactions')
+      .select('*')
+      .eq('account_name', accountName);
+    
+    if (groupId) {
+      // For group context: only include transactions assigned to this group
+      query = query
+        .eq('group_id', groupId)
+        .or(`user_id.eq.${currentUserId},created_by.eq.${currentUserId}${currentUserEmail ? `,member_email.eq.${currentUserEmail}` : ''}`);
+    } else {
+      // For personal context: include all user transactions
+      query = query.or(`user_id.eq.${currentUserId},created_by.eq.${currentUserId}${currentUserEmail ? `,member_email.eq.${currentUserEmail}` : ''}`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    
+    return (data || []).map(transaction => ({
+      ...transaction,
+      transaction_type: mapTransactionTypeFromDb(transaction.transaction_type)
+    }));
+  } catch (error) {
+    console.error('Error fetching transactions for balance calculation:', error);
     return [];
   }
 };
@@ -1292,11 +1346,25 @@ export const getFinancialAccounts = async () => {
 
     console.log('Fetching accounts for user:', user.id);
 
-    const { data, error } = await supabase
+    // Get user's groups to determine which group accounts they can access
+    const userGroups = await getUserGroups(user.id);
+    const groupIds = userGroups.map(g => g.id);
+    
+    // Build query to get personal accounts + group accounts user has access to
+    let query = supabase
       .from('accounts')
       .select('*')
-      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
+
+    if (groupIds.length > 0) {
+      // User has groups - get personal accounts OR accounts assigned to their groups
+      query = query.or(`and(user_id.eq.${user.id},group_id.is.null),group_id.in.(${groupIds.join(',')})`);
+    } else {
+      // User has no groups - only get their personal accounts
+      query = query.eq('user_id', user.id).is('group_id', null);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Supabase error fetching accounts:', error);
@@ -1512,6 +1580,109 @@ export const deleteFinancialAccount = async (accountId: string) => {
   } catch (error) {
     console.error('Error deleting financial account:', error);
     return false;
+  }
+};
+
+// Assign financial account to group (legacy single group - use addAccountGroupAssignment for multiple)
+export const assignAccountToGroup = async (accountId: string, groupId: string | null, contributionType?: 'none' | 'amount' | 'percentage', contributionAmount?: number, contributionPercentage?: number) => {
+  try {
+    if (groupId) {
+      // Add to the account_group_assignments table
+      console.log('🔄 Adding group assignment:', { accountId, groupId, contributionType, contributionAmount, contributionPercentage });
+      
+      const assignmentResult = await addAccountGroupAssignment(
+        accountId, 
+        groupId, 
+        contributionType || 'none', 
+        contributionAmount, 
+        contributionPercentage
+      );
+      
+      console.log('✅ Group assignment added:', assignmentResult);
+      
+      // Also update the legacy group_id field for backward compatibility
+      const { data, error } = await supabase
+        .from('accounts')
+        .update({ group_id: groupId })
+        .eq('id', accountId)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    } else {
+      // Remove from group - clear both legacy field and assignments
+      await supabase
+        .from('account_group_assignments')
+        .delete()
+        .eq('account_id', accountId);
+        
+      const { data, error } = await supabase
+        .from('accounts')
+        .update({ group_id: null })
+        .eq('id', accountId)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    }
+  } catch (error) {
+    console.error('Error assigning account to group:', error);
+    throw error;
+  }
+};
+
+// Multiple Group Assignment Functions
+export const addAccountGroupAssignment = async (accountId: string, groupId: string, contributionType: 'none' | 'amount' | 'percentage', contributionAmount?: number, contributionPercentage?: number) => {
+  try {
+    const { data, error } = await supabase
+      .from('account_group_assignments')
+      .upsert({ 
+        account_id: accountId,
+        group_id: groupId,
+        contribution_type: contributionType,
+        contribution_amount: contributionAmount || null,
+        contribution_percentage: contributionPercentage || null
+      }, { onConflict: 'account_id,group_id' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error adding account group assignment:', error);
+    throw error;
+  }
+};
+
+export const removeAccountGroupAssignment = async (accountId: string, groupId: string) => {
+  try {
+    const { error } = await supabase
+      .from('account_group_assignments')
+      .delete()
+      .eq('account_id', accountId)
+      .eq('group_id', groupId);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error removing account group assignment:', error);
+    throw error;
+  }
+};
+
+export const getAccountGroupAssignments = async (accountId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('account_group_assignments')
+      .select('*')
+      .eq('account_id', accountId);
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching account group assignments:', error);
+    return [];
   }
 };
 

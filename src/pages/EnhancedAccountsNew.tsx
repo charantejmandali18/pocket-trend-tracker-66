@@ -23,6 +23,7 @@ import {
   addFinancialAccount,
   updateFinancialAccount,
   deleteFinancialAccount,
+  assignAccountToGroup,
   type FinancialAccount
 } from '@/utils/storageService';
 
@@ -42,6 +43,11 @@ import {
   type HomeLoanParams,
   type ConstructionStage
 } from '@/utils/dataStorage';
+
+// Import Supabase-specific functions
+import {
+  getAccountGroupAssignments
+} from '@/utils/supabaseDataStorage';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -79,6 +85,7 @@ const EnhancedAccountsNew = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  const [accountAssignments, setAccountAssignments] = useState<{[accountId: string]: any[]}>({});
   const [financialSummary, setFinancialSummary] = useState({
     netWorth: 0,
     totalAssets: 0,
@@ -158,6 +165,70 @@ const EnhancedAccountsNew = () => {
     possession_date: '',
     actual_moratorium_emi: 0
   });
+
+  // Group Assignment Dialog States
+  const [showGroupAssignmentDialog, setShowGroupAssignmentDialog] = useState(false);
+  const [assigningAccount, setAssigningAccount] = useState<FinancialAccount | null>(null);
+  const [contributionSettings, setContributionSettings] = useState({
+    contributionType: 'none' as 'none' | 'amount' | 'percentage',
+    contributionAmount: 0,
+    contributionPercentage: 0
+  });
+
+  // Helper function to get contribution information from assignments
+  const getContributionInfo = (account: FinancialAccount) => {
+    const assignments = accountAssignments[account.id] || [];
+    if (assignments.length === 0) {
+      return { hasContribution: false, amount: 0, percentage: 0, type: 'none' };
+    }
+    
+    const assignment = assignments[0];
+    const hasAmount = assignment.contribution_amount && Number(assignment.contribution_amount) > 0;
+    const hasPercentage = assignment.contribution_percentage && Number(assignment.contribution_percentage) > 0;
+    
+    return {
+      hasContribution: hasAmount || hasPercentage,
+      amount: Number(assignment.contribution_amount) || 0,
+      percentage: Number(assignment.contribution_percentage) || 0,
+      type: assignment.contribution_type || 'none'
+    };
+  };
+
+  // Helper function to calculate the displayed amount for an account
+  // For group-assigned accounts, show only the contribution portion
+  // For personal accounts, show the full balance
+  const getDisplayAmount = (account: FinancialAccount): number => {
+    // In personal mode, always show full balance
+    if (isPersonalMode) {
+      return account.balance;
+    }
+    
+    // In group mode, check if account has assignments
+    const assignments = accountAssignments[account.id] || [];
+    
+    if (assignments.length === 0) {
+      // No assignments - show full balance (personal account or unassigned)
+      return account.balance;
+    }
+    
+    // Use the first assignment (assuming single group assignment for now)
+    const assignment = assignments[0];
+    const hasAmount = assignment.contribution_amount && Number(assignment.contribution_amount) > 0;
+    const hasPercentage = assignment.contribution_percentage && Number(assignment.contribution_percentage) > 0;
+    
+    if (hasAmount) {
+      console.log(`💰 Account ${account.name}: Using contribution amount ${assignment.contribution_amount}`);
+      return Number(assignment.contribution_amount);
+    } else if (hasPercentage) {
+      const calculatedAmount = (account.balance * Number(assignment.contribution_percentage)) / 100;
+      console.log(`📊 Account ${account.name}: Using contribution percentage ${assignment.contribution_percentage}% = ₹${calculatedAmount}`);
+      return calculatedAmount;
+    }
+    
+    // No contribution set - show 0 for group-assigned accounts (user should set contribution)
+    console.log(`⚠️ Account ${account.name}: Group account with no contribution set, showing 0`);
+    return 0;
+  };
 
   // Auto-calculate loan EMI for new account
   useEffect(() => {
@@ -339,20 +410,19 @@ const EnhancedAccountsNew = () => {
       setLoading(true);
       console.log('🔄 Loading accounts for user:', user.id, 'Personal mode:', isPersonalMode);
       
-      // Use unified storage service to get all accounts
-      const allAccounts = await getFinancialAccounts();
+      // Use unified storage service to get all accounts accessible to user
+      const allAccounts = await getFinancialAccounts(user.id);
       console.log('📊 All accounts from storage:', allAccounts.length, allAccounts);
       
       // Filter accounts based on mode
       let userAccounts: FinancialAccount[] = [];
       if (isPersonalMode) {
-        // Personal mode: get accounts with no group_id (null or undefined)
+        // Personal mode: show ALL user's accounts regardless of group assignment
         userAccounts = allAccounts.filter(a => 
           a.user_id === user.id && 
-          (a.group_id === null || a.group_id === undefined) &&
           a.is_active
         );
-        console.log('👤 Personal accounts filtered:', userAccounts.length);
+        console.log('👤 Personal accounts (all accounts):', userAccounts.length);
       } else if (currentGroup) {
         // Group mode: get accounts for this specific group
         userAccounts = allAccounts.filter(a => 
@@ -363,20 +433,35 @@ const EnhancedAccountsNew = () => {
       }
       
       console.log('✅ Final accounts to display:', userAccounts.length, userAccounts);
+      
+      // Load assignment data for each account
+      const assignmentsMap: {[accountId: string]: any[]} = {};
+      for (const account of userAccounts) {
+        try {
+          const assignments = await getAccountGroupAssignments(account.id);
+          assignmentsMap[account.id] = assignments || [];
+          console.log(`📝 Loaded assignments for ${account.name}:`, assignments);
+        } catch (error) {
+          console.error(`Error loading assignments for account ${account.name}:`, error);
+          assignmentsMap[account.id] = [];
+        }
+      }
+      
+      setAccountAssignments(assignmentsMap);
       setAccounts(userAccounts);
       
-      // Calculate financial summary
+      // Calculate financial summary using contribution amounts for group-assigned accounts
       const totalAssets = userAccounts
         .filter(a => !['credit_card', 'loan'].includes(a.type))
-        .reduce((sum, a) => sum + a.balance, 0);
+        .reduce((sum, a) => sum + getDisplayAmount(a), 0);
       
       const totalLiabilities = userAccounts
         .filter(a => ['credit_card', 'loan'].includes(a.type))
-        .reduce((sum, a) => sum + a.balance, 0);
+        .reduce((sum, a) => sum + getDisplayAmount(a), 0);
       
       const liquidCash = userAccounts
         .filter(a => a.type === 'cash')
-        .reduce((sum, a) => sum + a.balance, 0);
+        .reduce((sum, a) => sum + getDisplayAmount(a), 0);
       
       const netWorth = totalAssets - totalLiabilities;
       
@@ -804,6 +889,123 @@ const EnhancedAccountsNew = () => {
       toast({
         title: "Error",
         description: "Failed to delete account",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Function to handle quick group assignment (without contribution dialog)
+  const handleQuickAssignAccountToGroup = async (accountId: string, groupId: string | null) => {
+    try {
+      console.log('Quick assigning account:', accountId, 'to group:', groupId);
+      const result = await assignAccountToGroup(accountId, groupId, 'none', undefined, undefined);
+      console.log('Quick assignment result:', result);
+      
+      toast({
+        title: "Account Assignment Updated",
+        description: groupId ? "Account assigned to group successfully" : "Account assignment removed successfully",
+      });
+      
+      // Refresh accounts and data
+      await loadAccounts();
+      refreshData();
+      
+    } catch (error) {
+      console.error('Error assigning account to group:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update account assignment. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Function to open group assignment dialog with contribution settings
+  const handleOpenGroupAssignmentDialog = async (account: FinancialAccount) => {
+    console.log('🔴 Line 892 TEST - Dialog function called for:', account.name);
+    setAssigningAccount(account);
+    
+    try {
+      // Load contribution settings from account_group_assignments table
+      const assignments = await getAccountGroupAssignments(account.id);
+      console.log('📝 Loaded assignments for account:', account.name, assignments);
+      
+      if (assignments && assignments.length > 0) {
+        // Use the first assignment (assuming single group assignment for now)
+        const assignment = assignments[0];
+        setContributionSettings({
+          contributionType: assignment.contribution_type || 'none',
+          contributionAmount: Number(assignment.contribution_amount) || 0,
+          contributionPercentage: Number(assignment.contribution_percentage) || 0
+        });
+        console.log('📝 Loaded contribution settings from assignments:', {
+          type: assignment.contribution_type,
+          amount: assignment.contribution_amount,
+          percentage: assignment.contribution_percentage
+        });
+      } else {
+        // No assignments found, use default values
+        setContributionSettings({
+          contributionType: 'none',
+          contributionAmount: 0,
+          contributionPercentage: 0
+        });
+        console.log('📝 No assignments found, using default contribution settings');
+      }
+    } catch (error) {
+      console.error('Error loading account group assignments:', error);
+      // Fallback to default values
+      setContributionSettings({
+        contributionType: 'none',
+        contributionAmount: 0,
+        contributionPercentage: 0
+      });
+    }
+    
+    setShowGroupAssignmentDialog(true);
+  };
+
+  // Function to save group assignment with contribution settings
+  const handleSaveGroupAssignment = async (groupId: string | null) => {
+    if (!assigningAccount) return;
+    
+    try {
+      const contributionAmount = contributionSettings.contributionType === 'amount' ? contributionSettings.contributionAmount : undefined;
+      const contributionPercentage = contributionSettings.contributionType === 'percentage' ? contributionSettings.contributionPercentage : undefined;
+      
+      console.log('Saving group assignment:', {
+        accountId: assigningAccount.id,
+        groupId,
+        contributionType: contributionSettings.contributionType,
+        contributionAmount,
+        contributionPercentage
+      });
+      
+      const result = await assignAccountToGroup(assigningAccount.id, groupId, contributionSettings.contributionType, contributionAmount, contributionPercentage);
+      console.log('Assignment result:', result);
+      
+      toast({
+        title: "Account Assignment Updated",
+        description: groupId ? 
+          `Account assigned to group ${contributionSettings.contributionType === 'amount' ? 
+            `with ₹${contributionAmount} contribution` : 
+            contributionSettings.contributionType === 'percentage' ? 
+            `with ${contributionPercentage}% contribution` : 'successfully'}` : 
+          "Account assignment removed successfully",
+      });
+      
+      setShowGroupAssignmentDialog(false);
+      setAssigningAccount(null);
+      
+      // Refresh accounts and data
+      await loadAccounts();
+      refreshData();
+      
+    } catch (error) {
+      console.error('Error assigning account to group:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update account assignment. Please try again.",
         variant: "destructive",
       });
     }
@@ -1687,6 +1889,129 @@ const EnhancedAccountsNew = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Group Assignment Dialog */}
+      <Dialog open={showGroupAssignmentDialog} onOpenChange={setShowGroupAssignmentDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Account to Group</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {assigningAccount && (
+              <>
+                <div>
+                  <Label className="text-sm font-medium">Account</Label>
+                  <p className="text-sm text-gray-600">{assigningAccount.name}</p>
+                </div>
+                
+                <div>
+                  <Label htmlFor="group-select" className="text-sm font-medium">
+                    Assign to Group
+                  </Label>
+                  <Select 
+                    value={assigningAccount.group_id || 'personal'} 
+                    onValueChange={(value) => {
+                      if (value === 'personal') {
+                        handleSaveGroupAssignment(null);
+                      } else {
+                        // Set the selected group but don't save yet - let user configure contribution first
+                        setAssigningAccount({...assigningAccount, group_id: value});
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="personal">Personal Account</SelectItem>
+                      {userGroups.map((group) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {assigningAccount.group_id && assigningAccount.group_id !== 'personal' && (
+                  <>
+                    <div>
+                      <Label className="text-sm font-medium">Contribution Type</Label>
+                      <Select 
+                        value={contributionSettings.contributionType} 
+                        onValueChange={(value: any) => setContributionSettings({...contributionSettings, contributionType: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Contribution Sharing</SelectItem>
+                          <SelectItem value="amount">Fixed Amount</SelectItem>
+                          <SelectItem value="percentage">Percentage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {contributionSettings.contributionType === 'amount' && (
+                      <div>
+                        <Label htmlFor="contribution-amount" className="text-sm font-medium">
+                          Contribution Amount (₹)
+                        </Label>
+                        <Input
+                          id="contribution-amount"
+                          type="number"
+                          value={contributionSettings.contributionAmount}
+                          onChange={(e) => setContributionSettings({
+                            ...contributionSettings, 
+                            contributionAmount: Number(e.target.value)
+                          })}
+                          placeholder="Enter amount"
+                        />
+                      </div>
+                    )}
+
+                    {contributionSettings.contributionType === 'percentage' && (
+                      <div>
+                        <Label htmlFor="contribution-percentage" className="text-sm font-medium">
+                          Contribution Percentage (%)
+                        </Label>
+                        <Input
+                          id="contribution-percentage"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={contributionSettings.contributionPercentage}
+                          onChange={(e) => setContributionSettings({
+                            ...contributionSettings, 
+                            contributionPercentage: Number(e.target.value)
+                          })}
+                          placeholder="Enter percentage"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex space-x-2 pt-4">
+                      <Button 
+                        onClick={() => handleSaveGroupAssignment(assigningAccount.group_id)}
+                        className="flex-1"
+                      >
+                        Save Assignment
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setShowGroupAssignmentDialog(false)}
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
@@ -1790,7 +2115,7 @@ const EnhancedAccountsNew = () => {
                           <span className="text-sm">{account.name}</span>
                         </div>
                         <span className="text-sm font-medium text-green-600">
-                          {formatAccountBalance(account.balance, account.type)}
+                          {formatAccountBalance(getDisplayAmount(account), account.type)}
                         </span>
                       </div>
                     ))}
@@ -1822,7 +2147,7 @@ const EnhancedAccountsNew = () => {
                             <span className="text-sm">{account.name}</span>
                           </div>
                           <span className="text-sm font-medium text-red-600">
-                            {formatAccountBalance(account.balance, account.type)}
+                            {formatAccountBalance(getDisplayAmount(account), account.type)}
                           </span>
                         </div>
                       ))}
@@ -1881,22 +2206,65 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <Wallet className="h-5 w-5 text-blue-600" />
                         <div>
-                          <h3 className="font-medium">{account.name}</h3>
+                          <div className="flex items-center space-x-2">
+                            <h3 className="font-medium">{account.name}</h3>
+                            {account.group_id && (
+                              <Badge variant="outline" className="text-xs">
+                                {userGroups.find(g => g.id === account.group_id)?.name || 'Group'}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-500">
                             {account.bank_name} • {account.type.charAt(0).toUpperCase() + account.type.slice(1)}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
+                        {/* Group Assignment Dropdown */}
+                        {!isPersonalMode && userGroups.length > 0 && (
+                          <div className="flex flex-col items-center">
+                            <Label className="text-xs text-gray-500 mb-1">Group</Label>
+                            <Select 
+                              value={account.group_id || 'personal'} 
+                              onValueChange={(value) => handleQuickAssignAccountToGroup(account.id, value === 'personal' ? null : value)}
+                            >
+                              <SelectTrigger className="w-28 h-8 text-xs">
+                                <SelectValue placeholder="Assign" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="personal">Personal</SelectItem>
+                                {userGroups.map((group) => (
+                                  <SelectItem key={group.id} value={group.id}>
+                                    {group.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
                         <div className="text-right">
                           <div className="text-lg font-semibold text-green-600">
-                            {formatAccountBalance(account.balance, account.type)}
+                            {formatAccountBalance(getDisplayAmount(account), account.type)}
                           </div>
                           {account.is_pool_contribution && (
                             <Badge variant="secondary" className="text-xs">
                               Pool Contribution
                             </Badge>
                           )}
+                          {(() => {
+                            const contribution = getContributionInfo(account);
+                            return contribution.hasContribution && (
+                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-600 mt-1">
+                                {contribution.amount > 0 ? 
+                                  `Contributing ₹${formatIndianCurrency(contribution.amount)}` :
+                                  contribution.percentage > 0 ?
+                                  `Contributing ${contribution.percentage}% (₹${formatIndianCurrency(getDisplayAmount(account))})` :
+                                  'No contribution set'
+                                }
+                              </Badge>
+                            );
+                          })()}
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1916,6 +2284,18 @@ const EnhancedAccountsNew = () => {
                               <Edit2 className="h-4 w-4 mr-2" />
                               Edit Account
                             </DropdownMenuItem>
+                            {userGroups.length > 0 && (
+                              <DropdownMenuItem 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleOpenGroupAssignmentDialog(account);
+                                }}
+                              >
+                                <DollarSign className="h-4 w-4 mr-2" />
+                                Set Contribution
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem 
                               onClick={() => handleDeleteAccount(account.id, account.name)}
                               className="text-red-600"
@@ -1968,7 +2348,7 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
                           <div className="text-lg font-semibold text-green-600">
-                            {formatAccountBalance(account.balance, account.type)}
+                            {formatAccountBalance(getDisplayAmount(account), account.type)}
                           </div>
                           {account.is_pool_contribution && (
                             <Badge variant="secondary" className="text-xs">
@@ -1994,6 +2374,18 @@ const EnhancedAccountsNew = () => {
                               <Edit2 className="h-4 w-4 mr-2" />
                               Edit Account
                             </DropdownMenuItem>
+                            {userGroups.length > 0 && (
+                              <DropdownMenuItem 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleOpenGroupAssignmentDialog(account);
+                                }}
+                              >
+                                <DollarSign className="h-4 w-4 mr-2" />
+                                Set Contribution
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem 
                               onClick={() => handleDeleteAccount(account.id, account.name)}
                               className="text-red-600"
@@ -2043,22 +2435,65 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <CreditCardIcon className="h-5 w-5 text-orange-600" />
                         <div>
-                          <h3 className="font-medium">{account.name}</h3>
+                          <div className="flex items-center space-x-2">
+                            <h3 className="font-medium">{account.name}</h3>
+                            {account.group_id && (
+                              <Badge variant="outline" className="text-xs">
+                                {userGroups.find(g => g.id === account.group_id)?.name || 'Group'}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-500">
                             {account.bank_name} • Limit: {formatIndianCurrency(account.credit_limit || 0)}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
+                        {/* Group Assignment Dropdown */}
+                        {!isPersonalMode && userGroups.length > 0 && (
+                          <div className="flex flex-col items-center">
+                            <Label className="text-xs text-gray-500 mb-1">Group</Label>
+                            <Select 
+                              value={account.group_id || 'personal'} 
+                              onValueChange={(value) => handleQuickAssignAccountToGroup(account.id, value === 'personal' ? null : value)}
+                            >
+                              <SelectTrigger className="w-28 h-8 text-xs">
+                                <SelectValue placeholder="Assign" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="personal">Personal</SelectItem>
+                                {userGroups.map((group) => (
+                                  <SelectItem key={group.id} value={group.id}>
+                                    {group.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
                         <div className="text-right">
                           <div className="text-lg font-semibold text-red-600">
-                            {formatAccountBalance(account.balance, account.type)}
+                            {formatAccountBalance(getDisplayAmount(account), account.type)}
                           </div>
                           {account.credit_limit && (
                             <div className="text-xs text-gray-500">
                               {((account.balance / account.credit_limit) * 100).toFixed(1)}% used
                             </div>
                           )}
+                          {(() => {
+                            const contribution = getContributionInfo(account);
+                            return contribution.hasContribution && (
+                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-600 mt-1">
+                                {contribution.amount > 0 ? 
+                                  `Contributing ₹${formatIndianCurrency(contribution.amount)}` :
+                                  contribution.percentage > 0 ?
+                                  `Contributing ${contribution.percentage}% (₹${formatIndianCurrency(getDisplayAmount(account))})` :
+                                  'No contribution set'
+                                }
+                              </Badge>
+                            );
+                          })()}
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -2078,6 +2513,18 @@ const EnhancedAccountsNew = () => {
                               <Edit2 className="h-4 w-4 mr-2" />
                               Edit Account
                             </DropdownMenuItem>
+                            {userGroups.length > 0 && (
+                              <DropdownMenuItem 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleOpenGroupAssignmentDialog(account);
+                                }}
+                              >
+                                <DollarSign className="h-4 w-4 mr-2" />
+                                Set Contribution
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem 
                               onClick={() => handleDeleteAccount(account.id, account.name)}
                               className="text-red-600"
@@ -2124,18 +2571,59 @@ const EnhancedAccountsNew = () => {
                           <div className="flex items-center space-x-3">
                             <Building className="h-5 w-5 text-red-600" />
                             <div>
-                              <h3 className="font-medium">{account.name}</h3>
+                              <div className="flex items-center space-x-2">
+                                <h3 className="font-medium">{account.name}</h3>
+                                {account.group_id && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {userGroups.find(g => g.id === account.group_id)?.name || 'Group'}
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-sm text-gray-500">
                                 {account.bank_name} • {account.interest_rate ? `${account.interest_rate}% APR` : 'Loan'}
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center space-x-3">
+                            {/* Group Assignment Dropdown */}
+                            {!isPersonalMode && userGroups.length > 0 && (
+                              <div className="flex flex-col items-center">
+                                <Label className="text-xs text-gray-500 mb-1">Group</Label>
+                                <Select 
+                                  value={account.group_id || 'personal'} 
+                                  onValueChange={(value) => handleQuickAssignAccountToGroup(account.id, value === 'personal' ? null : value)}
+                                >
+                                  <SelectTrigger className="w-28 h-8 text-xs">
+                                    <SelectValue placeholder="Assign" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="personal">Personal</SelectItem>
+                                    {userGroups.map((group) => (
+                                      <SelectItem key={group.id} value={group.id}>
+                                        {group.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+
                             <div className="text-right">
                               <div className="text-lg font-semibold text-red-600">
-                                {formatAccountBalance(account.balance, account.type)}
+                                {formatAccountBalance(getDisplayAmount(account), account.type)}
                               </div>
                               <div className="text-xs text-gray-500">Outstanding</div>
+                              {(() => {
+                                const contribution = getContributionInfo(account);
+                                return contribution.hasContribution && (
+                                  <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-600 mt-1">
+                                    {contribution.amount > 0 ? 
+                                      `₹${formatIndianCurrency(contribution.amount)} contribution` :
+                                      `${contribution.percentage}% contribution`
+                                    }
+                                  </Badge>
+                                );
+                              })()}
                             </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -2237,7 +2725,7 @@ const EnhancedAccountsNew = () => {
                         <div className="flex items-center space-x-2">
                           <div className="text-right">
                             <div className="font-medium text-orange-600">
-                              {formatAccountBalance(account.balance, account.type)}
+                              {formatAccountBalance(getDisplayAmount(account), account.type)}
                             </div>
                             <div className="text-xs text-gray-500">per month</div>
                             <Button 
@@ -2283,7 +2771,7 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center justify-between font-medium">
                         <span>Total Monthly Recurring</span>
                         <span className="text-orange-600">
-                          {formatIndianCurrency(accounts.filter(a => a.type === 'recurring').reduce((sum, a) => sum + a.balance, 0))}
+                          {formatIndianCurrency(accounts.filter(a => a.type === 'recurring').reduce((sum, a) => sum + getDisplayAmount(a), 0))}
                         </span>
                       </div>
                     </div>
@@ -2319,18 +2807,61 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <TrendingUp className="h-5 w-5 text-green-600" />
                         <div>
-                          <h3 className="font-medium">{account.name}</h3>
+                          <div className="flex items-center space-x-2">
+                            <h3 className="font-medium">{account.name}</h3>
+                            {account.group_id && (
+                              <Badge variant="outline" className="text-xs">
+                                {userGroups.find(g => g.id === account.group_id)?.name || 'Group'}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-500">
                             {account.bank_name || 'Investment'} • {account.type.charAt(0).toUpperCase() + account.type.slice(1).replace('_', ' ')}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
+                        {/* Group Assignment Dropdown */}
+                        {!isPersonalMode && userGroups.length > 0 && (
+                          <div className="flex flex-col items-center">
+                            <Label className="text-xs text-gray-500 mb-1">Group</Label>
+                            <Select 
+                              value={account.group_id || 'personal'} 
+                              onValueChange={(value) => handleQuickAssignAccountToGroup(account.id, value === 'personal' ? null : value)}
+                            >
+                              <SelectTrigger className="w-28 h-8 text-xs">
+                                <SelectValue placeholder="Assign" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="personal">Personal</SelectItem>
+                                {userGroups.map((group) => (
+                                  <SelectItem key={group.id} value={group.id}>
+                                    {group.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
                         <div className="text-right">
                           <div className="text-lg font-semibold text-green-600">
-                            {formatAccountBalance(account.balance, account.type)}
+                            {formatAccountBalance(getDisplayAmount(account), account.type)}
                           </div>
                           <div className="text-xs text-gray-500">Current Value</div>
+                          {(() => {
+                            const contribution = getContributionInfo(account);
+                            return contribution.hasContribution && (
+                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-600 mt-1">
+                                {contribution.amount > 0 ? 
+                                  `Contributing ₹${formatIndianCurrency(contribution.amount)}` :
+                                  contribution.percentage > 0 ?
+                                  `Contributing ${contribution.percentage}% (₹${formatIndianCurrency(getDisplayAmount(account))})` :
+                                  'No contribution set'
+                                }
+                              </Badge>
+                            );
+                          })()}
                           <Button 
                             size="sm" 
                             variant="outline"
@@ -2406,18 +2937,61 @@ const EnhancedAccountsNew = () => {
                       <div className="flex items-center space-x-3">
                         <Building className="h-5 w-5 text-blue-600" />
                         <div>
-                          <h3 className="font-medium">{account.name}</h3>
+                          <div className="flex items-center space-x-2">
+                            <h3 className="font-medium">{account.name}</h3>
+                            {account.group_id && (
+                              <Badge variant="outline" className="text-xs">
+                                {userGroups.find(g => g.id === account.group_id)?.name || 'Group'}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-500">
                             {account.bank_name || 'Insurance'} • {account.type.charAt(0).toUpperCase() + account.type.slice(1).replace('_', ' ')}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
+                        {/* Group Assignment Dropdown */}
+                        {!isPersonalMode && userGroups.length > 0 && (
+                          <div className="flex flex-col items-center">
+                            <Label className="text-xs text-gray-500 mb-1">Group</Label>
+                            <Select 
+                              value={account.group_id || 'personal'} 
+                              onValueChange={(value) => handleQuickAssignAccountToGroup(account.id, value === 'personal' ? null : value)}
+                            >
+                              <SelectTrigger className="w-28 h-8 text-xs">
+                                <SelectValue placeholder="Assign" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="personal">Personal</SelectItem>
+                                {userGroups.map((group) => (
+                                  <SelectItem key={group.id} value={group.id}>
+                                    {group.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
                         <div className="text-right">
                           <div className="text-lg font-semibold text-blue-600">
-                            {formatAccountBalance(account.balance, account.type)}
+                            {formatAccountBalance(getDisplayAmount(account), account.type)}
                           </div>
                           <div className="text-xs text-gray-500">Coverage/Premium</div>
+                          {(() => {
+                            const contribution = getContributionInfo(account);
+                            return contribution.hasContribution && (
+                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-600 mt-1">
+                                {contribution.amount > 0 ? 
+                                  `Contributing ₹${formatIndianCurrency(contribution.amount)}` :
+                                  contribution.percentage > 0 ?
+                                  `Contributing ${contribution.percentage}% (₹${formatIndianCurrency(getDisplayAmount(account))})` :
+                                  'No contribution set'
+                                }
+                              </Badge>
+                            );
+                          })()}
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

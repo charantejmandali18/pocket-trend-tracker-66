@@ -343,6 +343,16 @@ export const findGroupByCode = (groupCode: string): StoredGroup | null => {
 };
 
 // Financial Account storage
+export interface AccountGroupAssignment {
+  id?: string;
+  account_id: string;
+  group_id: string;
+  contribution_type: 'none' | 'amount' | 'percentage';
+  contribution_amount?: number;
+  contribution_percentage?: number;
+  created_at?: string;
+}
+
 export interface FinancialAccount {
   id: string;
   user_id: string;
@@ -356,6 +366,15 @@ export interface FinancialAccount {
   interest_rate?: number;
   created_at: string;
   is_active: boolean;
+  
+  // Legacy single group assignment (deprecated - use group_assignments instead)
+  group_id?: string | null;
+  contribution_type?: 'none' | 'amount' | 'percentage';
+  contribution_amount?: number;
+  contribution_percentage?: number;
+  
+  // Multiple group assignments
+  group_assignments?: AccountGroupAssignment[];
   
   // Enhanced loan and EMI fields
   monthly_emi?: number;
@@ -550,7 +569,8 @@ const INSURANCE_KEY = 'pocket_tracker_insurance';
 const PROPERTIES_KEY = 'pocket_tracker_properties';
 const RECURRING_PAYMENTS_KEY = 'pocket_tracker_recurring_payments';
 
-export const getFinancialAccounts = (): FinancialAccount[] => {
+// Internal function to get all accounts (for operations)
+const getAllFinancialAccounts = (): FinancialAccount[] => {
   try {
     const stored = localStorage.getItem(FINANCIAL_ACCOUNTS_KEY);
     return stored ? JSON.parse(stored) : [];
@@ -560,8 +580,38 @@ export const getFinancialAccounts = (): FinancialAccount[] => {
   }
 };
 
+export const getFinancialAccounts = (userId?: string): FinancialAccount[] => {
+  const allAccounts = getAllFinancialAccounts();
+  
+  // If no userId provided, return all accounts (for backward compatibility)
+  if (!userId) return allAccounts;
+  
+  // Get user's groups to determine which group accounts they can access
+  const userGroups = getStoredGroups().filter(g => {
+    const membership = getGroupMemberships().find(m => 
+      m.group_id === g.id && 
+      m.user_id === userId && 
+      ['active', 'accepted'].includes(m.status)
+    );
+    return !!membership;
+  });
+  
+  const groupIds = userGroups.map(g => g.id);
+  
+  // Return personal accounts + accounts assigned to user's groups
+  return allAccounts.filter(account => {
+    // Personal accounts (no group_id or null group_id) owned by user
+    const isPersonalAccount = (account.group_id === null || account.group_id === undefined) && account.user_id === userId;
+    
+    // Group accounts assigned to groups user is member of
+    const isGroupAccount = account.group_id && groupIds.includes(account.group_id);
+    
+    return isPersonalAccount || isGroupAccount;
+  });
+};
+
 export const addFinancialAccount = (account: Omit<FinancialAccount, 'id' | 'created_at'>): FinancialAccount => {
-  const accounts = getFinancialAccounts();
+  const accounts = getAllFinancialAccounts(); // Get all accounts for adding
   
   const newAccount: FinancialAccount = {
     ...account,
@@ -581,7 +631,7 @@ export const updateFinancialAccount = (accountId: string, updates: Partial<Finan
   transactionCategory?: string,
   transactionType?: 'income' | 'expense'
 }) => {
-  const accounts = getFinancialAccounts();
+  const accounts = getAllFinancialAccounts();
   const index = accounts.findIndex(a => a.id === accountId);
   
   if (index !== -1) {
@@ -655,14 +705,89 @@ export const updateFinancialAccount = (accountId: string, updates: Partial<Finan
 };
 
 export const deleteFinancialAccount = (accountId: string) => {
-  const accounts = getFinancialAccounts();
+  const accounts = getAllFinancialAccounts();
   const filtered = accounts.filter(a => a.id !== accountId);
   localStorage.setItem(FINANCIAL_ACCOUNTS_KEY, JSON.stringify(filtered));
 };
 
+// Assign financial account to group
+export const assignAccountToGroup = (accountId: string, groupId: string | null, contributionType?: 'none' | 'amount' | 'percentage', contributionAmount?: number, contributionPercentage?: number) => {
+  const accounts = getAllFinancialAccounts();
+  const index = accounts.findIndex(a => a.id === accountId);
+  
+  if (index !== -1) {
+    const account = accounts[index];
+    const updatedAccount = { 
+      ...account, 
+      group_id: groupId,
+      contribution_type: contributionType || 'none',
+      contribution_amount: contributionAmount,
+      contribution_percentage: contributionPercentage
+    };
+    
+    accounts[index] = updatedAccount;
+    localStorage.setItem(FINANCIAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+    return updatedAccount;
+  }
+  
+  throw new Error('Account not found');
+};
+
+// Multiple Group Assignment Functions
+export const addAccountGroupAssignment = (accountId: string, groupId: string, contributionType: 'none' | 'amount' | 'percentage', contributionAmount?: number, contributionPercentage?: number): AccountGroupAssignment => {
+  const assignment: AccountGroupAssignment = {
+    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+    account_id: accountId,
+    group_id: groupId,
+    contribution_type: contributionType,
+    contribution_amount: contributionAmount,
+    contribution_percentage: contributionPercentage,
+    created_at: new Date().toISOString()
+  };
+  
+  // For local storage, we'll store assignments as part of account data for now
+  const accounts = getAllFinancialAccounts();
+  const accountIndex = accounts.findIndex(a => a.id === accountId);
+  
+  if (accountIndex !== -1) {
+    if (!accounts[accountIndex].group_assignments) {
+      accounts[accountIndex].group_assignments = [];
+    }
+    
+    // Remove existing assignment for this group if it exists
+    accounts[accountIndex].group_assignments = accounts[accountIndex].group_assignments!.filter(
+      ga => ga.group_id !== groupId
+    );
+    
+    // Add new assignment
+    accounts[accountIndex].group_assignments!.push(assignment);
+    localStorage.setItem(FINANCIAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+  }
+  
+  return assignment;
+};
+
+export const removeAccountGroupAssignment = (accountId: string, groupId: string) => {
+  const accounts = getAllFinancialAccounts();
+  const accountIndex = accounts.findIndex(a => a.id === accountId);
+  
+  if (accountIndex !== -1 && accounts[accountIndex].group_assignments) {
+    accounts[accountIndex].group_assignments = accounts[accountIndex].group_assignments!.filter(
+      ga => ga.group_id !== groupId
+    );
+    localStorage.setItem(FINANCIAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+  }
+};
+
+export const getAccountGroupAssignments = (accountId: string): AccountGroupAssignment[] => {
+  const accounts = getAllFinancialAccounts();
+  const account = accounts.find(a => a.id === accountId);
+  return account?.group_assignments || [];
+};
+
 // Process EMI payment - automatically deducts from account and creates transaction
 export const processEMIPayment = (loanAccountId: string, sourceAccountId: string, emiAmount?: number) => {
-  const accounts = getFinancialAccounts();
+  const accounts = getAllFinancialAccounts();
   const loanAccount = accounts.find(a => a.id === loanAccountId);
   const sourceAccount = accounts.find(a => a.id === sourceAccountId);
   
@@ -706,7 +831,7 @@ export const processEMIPayment = (loanAccountId: string, sourceAccountId: string
 
 // Process investment update - automatically creates transaction
 export const processInvestmentUpdate = (investmentAccountId: string, newBalance: number, sourceAccountId?: string) => {
-  const accounts = getFinancialAccounts();
+  const accounts = getAllFinancialAccounts();
   const investmentAccount = accounts.find(a => a.id === investmentAccountId);
   
   if (!investmentAccount) {
@@ -752,7 +877,7 @@ export const processInvestmentUpdate = (investmentAccountId: string, newBalance:
 
 // Process recurring payment - automatically creates transaction and deducts from account
 export const processRecurringPayment = (recurringAccountId: string, sourceAccountId: string) => {
-  const accounts = getFinancialAccounts();
+  const accounts = getAllFinancialAccounts();
   const recurringAccount = accounts.find(a => a.id === recurringAccountId);
   const sourceAccount = accounts.find(a => a.id === sourceAccountId);
   
@@ -789,7 +914,7 @@ export const processRecurringPayment = (recurringAccountId: string, sourceAccoun
 
 // Get personal financial accounts
 export const getPersonalFinancialAccounts = (userId: string): FinancialAccount[] => {
-  const accounts = getFinancialAccounts();
+  const accounts = getAllFinancialAccounts();
   return accounts.filter(a => 
     a.user_id === userId && 
     a.is_active && 
@@ -799,7 +924,7 @@ export const getPersonalFinancialAccounts = (userId: string): FinancialAccount[]
 
 // Get group financial accounts
 export const getGroupFinancialAccounts = (groupId: string): FinancialAccount[] => {
-  const accounts = getFinancialAccounts();
+  const accounts = getAllFinancialAccounts();
   return accounts.filter(a => 
     a.group_id === groupId && 
     a.is_active
@@ -868,7 +993,7 @@ export const shareAssetWithGroup = (
   splitDetails: GroupAssetSplit[]
 ): boolean => {
   try {
-    const accounts = getFinancialAccounts();
+    const accounts = getAllFinancialAccounts();
     const accountIndex = accounts.findIndex(a => a.id === accountId);
     
     if (accountIndex !== -1) {
@@ -927,24 +1052,80 @@ export const getUserIdByEmail = (email: string): string | null => {
   return mapping?.user_id || null;
 };
 
-// Get transactions for personal mode (only current user's transactions)
+// Get transactions for personal mode - shows ALL user's transactions (personal + all group transactions they have access to)
 export const getPersonalTransactions = (currentUserId: string, currentUserEmail?: string): StoredTransaction[] => {
   const allTransactions = getStoredTransactions();
   return allTransactions.filter(t => {
-    // For personal mode, show transactions where:
-    // 1. user_id matches current user (direct transactions)
-    // 2. OR group_id is null/undefined AND created_by is current user (imported personal data)
+    // For personal mode, show ALL transactions where the user is involved:
+    // 1. user_id matches current user (their direct transactions)
+    // 2. OR created_by is current user (they imported the data)
     // 3. OR member_email matches current user's email (group transactions for this user)
     return t.user_id === currentUserId || 
-           ((t.group_id === null || t.group_id === undefined) && t.created_by === currentUserId) ||
+           t.created_by === currentUserId ||
            (currentUserEmail && t.member_email === currentUserEmail);
   });
 };
 
-// Get transactions for group mode (all group transactions)
-export const getGroupTransactions = (groupId: string): StoredTransaction[] => {
+// Get transactions for group mode - shows ONLY transactions assigned to specific group
+export const getGroupTransactions = (groupId: string, currentUserId: string, currentUserEmail?: string): StoredTransaction[] => {
   const allTransactions = getStoredTransactions();
-  return allTransactions.filter(t => t.group_id === groupId);
+  return allTransactions.filter(t => {
+    const isUserTransaction = t.user_id === currentUserId || 
+                             t.created_by === currentUserId ||
+                             (currentUserEmail && t.member_email === currentUserEmail);
+    
+    if (!isUserTransaction) return false;
+    
+    // Show ONLY transactions assigned to this specific group
+    return t.group_id === groupId;
+  });
+};
+
+// Assign transaction to a group (or unassign by passing null)
+export const assignTransactionToGroup = (transactionId: string, groupId: string | null): boolean => {
+  try {
+    const transactions = getStoredTransactions();
+    const index = transactions.findIndex(t => t.id === transactionId);
+    
+    if (index !== -1) {
+      transactions[index] = { ...transactions[index], group_id: groupId };
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error assigning transaction to group:', error);
+    return false;
+  }
+};
+
+// Get transactions for account balance calculation (respects group context)
+export const getTransactionsForBalanceCalculation = (
+  accountName: string, 
+  currentUserId: string, 
+  groupId?: string | null,
+  currentUserEmail?: string
+): StoredTransaction[] => {
+  const allTransactions = getStoredTransactions();
+  
+  return allTransactions.filter(t => {
+    // Must be for this account and user
+    const isAccountTransaction = t.account_name === accountName && 
+                               (t.user_id === currentUserId || 
+                                t.created_by === currentUserId ||
+                                (currentUserEmail && t.member_email === currentUserEmail));
+    
+    if (!isAccountTransaction) return false;
+    
+    if (groupId) {
+      // For group context: only include transactions assigned to this group
+      return t.group_id === groupId;
+    } else {
+      // For personal context: include all transactions
+      return true;
+    }
+  });
 };
 
 export const clearAllStoredData = () => {
@@ -1135,7 +1316,7 @@ export const getAllUserFinancials = (userId: string, groupId?: string) => {
   };
 
   return {
-    accounts: getFinancialAccounts().filter(filter),
+    accounts: getAllFinancialAccounts().filter(filter),
     creditCards: getCreditCards().filter(filter),
     loans: getLoans().filter(filter),
     investments: getInvestments().filter(filter),
@@ -1185,7 +1366,7 @@ export const debugStoredData = () => {
     groups: getStoredGroups().length,
     memberships: getGroupMemberships().length,
     userMappings: getUserMappings().length,
-    financialAccounts: getFinancialAccounts().length
+    financialAccounts: getAllFinancialAccounts().length
   };
   
   console.log('Stored data counts:', data);
@@ -1596,7 +1777,7 @@ export const addManualDisbursement = (
   cumulativeDisbursedAmount: number
 ): boolean => {
   try {
-    const accounts = getFinancialAccounts();
+    const accounts = getAllFinancialAccounts();
     const accountIndex = accounts.findIndex(a => a.id === accountId);
     
     if (accountIndex === -1) return false;
@@ -1647,7 +1828,7 @@ export const processStageCompletion = (
   actualAmount?: number
 ): boolean => {
   try {
-    const accounts = getFinancialAccounts();
+    const accounts = getAllFinancialAccounts();
     const accountIndex = accounts.findIndex(a => a.id === accountId);
     
     if (accountIndex === -1) return false;

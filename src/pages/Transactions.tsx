@@ -37,6 +37,7 @@ import {
   deleteStoredTransaction,
   updateStoredTransaction,
   addStoredTransaction,
+  assignTransactionToGroup,
   getFinancialAccounts,
   updateFinancialAccount,
   type FinancialAccount
@@ -60,7 +61,7 @@ interface FilterState {
 const Transactions = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, isPersonalMode, currentGroup, categories, selectedMonth, dataVersion, refreshData } = useApp();
+  const { user, isPersonalMode, currentGroup, userGroups, categories, selectedMonth, dataVersion, refreshData } = useApp();
   const { toast } = useToast();
 
   // Initialize date filters based on selected month
@@ -203,7 +204,7 @@ const Transactions = () => {
       if (isPersonalMode) {
         filteredData = await getPersonalTransactions(user.id, user.email);
       } else if (currentGroup) {
-        filteredData = await getGroupTransactions(currentGroup.id);
+        filteredData = await getGroupTransactions(currentGroup.id, user.id, user.email);
       } else {
         filteredData = [];
       }
@@ -469,6 +470,31 @@ const Transactions = () => {
     });
   };
 
+  const handleAssignToGroup = async (transactionId: string, groupId: string | null) => {
+    try {
+      const success = await assignTransactionToGroup(transactionId, groupId);
+      
+      if (success) {
+        const groupName = groupId ? userGroups.find(g => g.id === groupId)?.name : 'Personal';
+        toast({
+          title: "Success",
+          description: `Transaction assigned to ${groupName} successfully`,
+        });
+        fetchTransactions(); // Refresh the transaction list
+        refreshData();
+      } else {
+        throw new Error('Failed to assign transaction to group');
+      }
+    } catch (error) {
+      console.error('Error assigning transaction to group:', error);
+      toast({
+        title: "Error",
+        description: "Failed to assign transaction to group",
+        variant: "destructive",
+      });
+    }
+  };
+
   const exportTransactions = () => {
     const csvContent = [
       ['Date', 'Type', 'Description', 'Category', 'Amount', 'Payment Method', 'Account', 'Notes'],
@@ -726,6 +752,14 @@ const Transactions = () => {
                             <span>{transaction.account_name}</span>
                           </>
                         )}
+                        {transaction.group_id && (
+                          <>
+                            <span>•</span>
+                            <span className="text-blue-600">
+                              Group: {userGroups.find(g => g.id === transaction.group_id)?.name || 'Unknown'}
+                            </span>
+                          </>
+                        )}
                       </div>
                       {transaction.notes && (
                         <div className="text-xs text-gray-400 mt-1">
@@ -738,21 +772,41 @@ const Transactions = () => {
                     <div className={`text-lg font-semibold ${transaction.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
                       {transaction.transaction_type === 'credit' ? '+' : '-'}{formatFullIndianCurrency(transaction.amount).replace('₹', '₹')}
                     </div>
-                    <div className="flex space-x-1">
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => handleEdit(transaction)}
+                    <div className="flex items-center space-x-2">
+                      {/* Group Assignment Dropdown */}
+                      <Select 
+                        value={transaction.group_id || 'personal'} 
+                        onValueChange={(value) => handleAssignToGroup(transaction.id, value === 'personal' ? null : value)}
                       >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => handleDelete(transaction.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        <SelectTrigger className="w-32 h-8 text-xs">
+                          <SelectValue placeholder="Assign" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="personal">Personal</SelectItem>
+                          {userGroups.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      
+                      <div className="flex space-x-1">
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleEdit(transaction)}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleDelete(transaction.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
